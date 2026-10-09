@@ -1,0 +1,119 @@
+{
+  "name": "agent-sessions",
+  "displayName": "Agent Sessions",
+  "description": "All your Claude Code and Codex sessions in one panel. Resume any conversation with one click.",
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#1f2430",
+    "theme": "dark"
+  },
+  "version": "0.2.0",
+  "publisher": "hopleus",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hopleus/vscode-agent-sessions.git"
+  },
+  "bugs": {
+    "url": "https://github.com/hopleus/vscode-agent-sessions/issues"
+  },
+  "homepage": "https://github.com/hopleus/vscode-agent-sessions#readme",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "agent-sessions",
+          "title": "Agent Sessions",
+          "icon": "media/activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "agent-sessions": [
+        {
+          "type": "webview",
+          "id": "agentSessions.view",
+          "name": "Agent Sessions"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "agentSessions.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)",
+        "category": "Agent Sessions"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "agentSessions.refresh",
+          "when": "view == agentSessions.view",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Agent Sessions",
+      "properties": {
+        "agentSessions.agents": {
+          "type": "array",
+          "default": [],
+          "description": "Agent overrides: id, name, command, enabled. Merged with built-in Claude and Codex.",
+          "scope": "application"
+        },
+        "agentSessions.claudeProjectsPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to Claude Code projects directory. Empty = ~/.claude/projects"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "vendor": "mkdir -p media/vendor && cp node_modules/@vscode/codicons/dist/codicon.css node_modules/@vscode/codicons/dist/codicon.ttf media/vendor/",
+    "typecheck": "tsc -p ./ --noEmit && tsc -p tsconfig.webview.json",
+    "build:webview": "esbuild src/webview/main.ts --bundle --format=iife --target=es2020 --loader:.svg=text --outfile=media/dist/main.js",
+    "compile": "rm -rf out media/dist && npm run vendor && npm run typecheck && tsc -p ./ && npm run build:webview",
+    "watch": "tsc -watch -p ./",
+    "watch:webview": "esbuild src/webview/main.ts --bundle --format=iife --target=es2020 --loader:.svg=text --outfile=media/dist/main.js --watch",
+    "test": "tsc -p ./ && node --test \"out/**/*.test.js\"",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@lobehub/icons-static-svg": "^1.95.1",
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^4.0.0",
+    "esbuild": "^0.28.2",
+    "simple-icons": "^16.34.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "@vscode-elements/elements": "^2.5.1",
+    "@vscode/codicons": "^0.0.45"
+  },
+  "keywords": [
+    "claude",
+    "claude code",
+    "codex",
+    "ai",
+    "agent",
+    "sessions",
+    "chat history",
+    "resume"
+  ]
+}
