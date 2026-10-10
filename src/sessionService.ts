@@ -6,6 +6,7 @@ import { SessionDto, StateMessage } from './protocol';
 import { SessionCatalog } from './sessions/catalog';
 import { ClaudeSource } from './sessions/claude';
 import { CodexSource } from './sessions/codex';
+import { OpenCodeSource } from './sessions/opencode';
 import { isSafeId, SessionRecord } from './sessions/types';
 import { DebouncedWatcher } from './sessions/watcher';
 import { OpenSessionsStore, PrefsStore } from './storage';
@@ -13,7 +14,6 @@ import { TerminalManager } from './terminals';
 import { activeRoot, workspaceRoots } from './workspace';
 
 const RESTORE_STAGGER_MS = 400;
-const TAB_LABEL_SETTLE_MS = 3000;
 
 function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -30,11 +30,13 @@ export class SessionService implements vscode.Disposable {
   private readonly terminals: TerminalManager;
   private readonly watcher: DebouncedWatcher;
   private readonly subscriptions: vscode.Disposable[];
+  private pollTimer: NodeJS.Timeout | undefined;
 
   constructor(context: vscode.ExtensionContext) {
     this.catalog = new SessionCatalog([
       new ClaudeSource(() => vscode.workspace.getConfiguration(CONFIG_SECTION).get<string>('claudeProjectsPath', '')),
       new CodexSource(),
+      new OpenCodeSource(),
     ]);
     this.prefs = new PrefsStore(context.workspaceState);
     this.openSessions = new OpenSessionsStore(context.workspaceState);
@@ -55,7 +57,15 @@ export class SessionService implements vscode.Disposable {
   }
 
   dispose(): void {
+    this.setPolling(false);
     this.subscriptions.forEach(s => s.dispose());
+  }
+
+  setPolling(active: boolean): void {
+    clearInterval(this.pollTimer);
+    this.pollTimer = undefined;
+    const interval = this.catalog.pollIntervalMs();
+    if (active && interval) { this.pollTimer = setInterval(() => this.changed.fire(), interval); }
   }
 
   async state(): Promise<StateMessage> {
@@ -82,12 +92,12 @@ export class SessionService implements vscode.Disposable {
   async restore(): Promise<void> {
     const stored = this.openSessions.list();
     if (stored.length === 0 || process.platform === 'win32') { return; }
+    await this.terminals.waitUntilReady();
     const records = await this.catalog.list(workspaceRoots());
     for (const { agentId, id } of stored) {
       this.openWith(id, agentId, records);
       await delay(RESTORE_STAGGER_MS);
     }
-    await this.labelRestoredTabs(stored.map(({ id }) => id), records);
   }
 
   async open(id: string, agentId: string): Promise<void> {
@@ -139,17 +149,6 @@ export class SessionService implements vscode.Disposable {
       updatedAt: session.updatedAt,
       pinned: !!prefs.pinned,
     };
-  }
-
-  private async labelRestoredTabs(ids: string[], records: SessionRecord[]): Promise<void> {
-    await delay(TAB_LABEL_SETTLE_MS);
-    for (const id of ids) {
-      const title = this.prefs.get(id).name || records.find(record => record.id === id)?.title;
-      if (title && this.terminals.show(id)) {
-        await delay(RESTORE_STAGGER_MS);
-        this.terminals.renameActive(title, true);
-      }
-    }
   }
 
   private openWith(id: string, agentId: string, records: SessionRecord[]): void {

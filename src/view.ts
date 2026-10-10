@@ -24,7 +24,12 @@ export class SessionsView implements vscode.WebviewViewProvider, vscode.Disposab
     view.webview.options = { enableScripts: true, localResourceRoots: [mediaRoot] };
     view.webview.html = buildWebviewHtml(view.webview, mediaRoot);
     view.webview.onDidReceiveMessage((raw: unknown) => this.handle(raw));
-    view.onDidChangeVisibility(() => { if (view.visible) { void this.push(true); } });
+    view.onDidChangeVisibility(() => {
+      this.service.setPolling(view.visible);
+      if (view.visible) { void this.push(true); }
+    });
+    view.onDidDispose(() => this.service.setPolling(false));
+    this.service.setPolling(view.visible);
   }
 
   dispose(): void {

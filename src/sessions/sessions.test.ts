@@ -175,6 +175,7 @@ describe('jsonl helpers', () => {
 describe('isSafeId', () => {
   it('accepts uuids and rejects shell metacharacters', () => {
     assert.ok(isSafeId(ID_A));
+    assert.ok(isSafeId('ses_eded7e3e3ffeLRNS3gZzNEriyT'));
     assert.ok(!isSafeId('abc; rm -rf /'));
     assert.ok(!isSafeId(''));
   });

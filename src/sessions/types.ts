@@ -20,13 +20,14 @@ export type SessionFinder = (cwd: string, since: number, taken: ReadonlySet<stri
 
 export interface SessionSource {
   readonly agentId: string;
+  readonly pollIntervalMs?: number;
   list(cwd: string): Promise<SessionRecord[]>;
   watchTarget(cwd: string): WatchTarget;
   resumeCommand(command: string, id: string): string;
   newSession(command: string): NewSessionPlan;
 }
 
-const SAFE_ID = /^[A-Za-z0-9-]+$/;
+const SAFE_ID = /^[A-Za-z0-9_-]+$/;
 
 export function isSafeId(id: string): boolean {
   return SAFE_ID.test(id);

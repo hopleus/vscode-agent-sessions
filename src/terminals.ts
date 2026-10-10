@@ -17,9 +17,10 @@ interface LaunchOptions {
   cwd: string;
 }
 
-const TAB_ICON_AGENTS: readonly string[] = ['claude', 'codex'];
+const TAB_ICON_AGENTS: readonly string[] = ['claude', 'codex', 'opencode'];
 const DEFAULT_TAB_TITLE = 'New Session';
 const FALLBACK_SHELL = '/bin/bash';
+const READY_TIMEOUT_MS = 15000;
 
 export class TerminalManager implements vscode.Disposable {
   private readonly terminals = new Map<string, vscode.Terminal>();
@@ -41,6 +42,21 @@ export class TerminalManager implements vscode.Disposable {
 
   dispose(): void {
     this.subscriptions.forEach(s => s.dispose());
+  }
+
+  async waitUntilReady(timeoutMs = READY_TIMEOUT_MS): Promise<void> {
+    const probe = vscode.window.createTerminal({
+      name: 'agent-sessions-probe',
+      hideFromUser: true,
+      isTransient: true,
+      shellPath: '/bin/sh',
+      shellArgs: ['-c', 'sleep 5'],
+    });
+    try {
+      await Promise.race([probe.processId, new Promise(resolve => setTimeout(resolve, timeoutMs))]);
+    } finally {
+      probe.dispose();
+    }
   }
 
   show(id: string): boolean {
@@ -90,9 +106,9 @@ export class TerminalManager implements vscode.Disposable {
     return [...this.terminals].find(([, terminal]) => terminal === active)?.[0];
   }
 
-  renameActive(title: string, force = false): void {
+  renameActive(title: string): void {
     const active = vscode.window.activeTerminal;
-    if (active && (force || active.name !== title)) {
+    if (active && active.name !== title) {
       void vscode.commands.executeCommand('workbench.action.terminal.renameWithArg', { name: title });
     }
   }

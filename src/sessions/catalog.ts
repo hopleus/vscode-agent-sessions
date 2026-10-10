@@ -12,6 +12,11 @@ export class SessionCatalog {
     return this.sources.find(source => source.agentId === agentId);
   }
 
+  pollIntervalMs(): number | undefined {
+    const intervals = this.sources.flatMap(source => source.pollIntervalMs ?? []);
+    return intervals.length ? Math.min(...intervals) : undefined;
+  }
+
   watchTargets(roots: readonly string[]): WatchTarget[] {
     return roots.flatMap(root => this.sources.map(source => source.watchTarget(root)));
   }

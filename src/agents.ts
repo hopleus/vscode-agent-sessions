@@ -11,6 +11,7 @@ export interface Agent {
 const BUILT_IN_AGENTS: readonly Agent[] = [
   { id: 'claude', name: 'Claude', command: 'claude', enabled: true },
   { id: 'codex', name: 'Codex', command: 'codex', enabled: true },
+  { id: 'opencode', name: 'OpenCode', command: 'opencode', enabled: true },
 ];
 
 export function allAgents(): Agent[] {
