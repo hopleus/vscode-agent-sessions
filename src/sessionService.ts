@@ -94,7 +94,8 @@ export class SessionService implements vscode.Disposable {
     if (stored.length === 0 || process.platform === 'win32') { return; }
     await this.terminals.waitUntilReady();
     const records = await this.catalog.list(workspaceRoots());
-    for (const { agentId, id } of stored) {
+    const running = this.terminals.adoptRunning(stored);
+    for (const { agentId, id } of stored.filter(session => !running.has(session.id))) {
       this.openWith(id, agentId, records);
       await delay(RESTORE_STAGGER_MS);
     }

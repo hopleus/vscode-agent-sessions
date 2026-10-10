@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { OpenSessionsStore } from './storage';
+import { OpenSession, OpenSessionsStore } from './storage';
 import { SessionFinder } from './sessions/types';
 
 interface PendingTerminal {
@@ -57,6 +57,20 @@ export class TerminalManager implements vscode.Disposable {
     } finally {
       probe.dispose();
     }
+  }
+
+  adoptRunning(sessions: readonly OpenSession[]): Set<string> {
+    const adopted = new Set<string>();
+    const tracked = new Set(this.terminals.values());
+    for (const terminal of vscode.window.terminals) {
+      if (tracked.has(terminal)) { continue; }
+      const tokens = launchCommandOf(terminal).split(/\s+/);
+      const match = sessions.find(session => !adopted.has(session.id) && tokens.includes(session.id));
+      if (!match) { continue; }
+      adopted.add(match.id);
+      this.track(match.agentId, match.id, terminal);
+    }
+    return adopted;
   }
 
   show(id: string): boolean {
@@ -153,4 +167,10 @@ export class TerminalManager implements vscode.Disposable {
 
 function isDeliberateExit(reason: vscode.TerminalExitReason | undefined): boolean {
   return reason === vscode.TerminalExitReason.User || reason === vscode.TerminalExitReason.Process;
+}
+
+function launchCommandOf(terminal: vscode.Terminal): string {
+  const args = (terminal.creationOptions as vscode.TerminalOptions).shellArgs;
+  if (Array.isArray(args)) { return args.join(' '); }
+  return typeof args === 'string' ? args : '';
 }

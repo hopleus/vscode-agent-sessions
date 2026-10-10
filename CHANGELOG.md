@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1
+
+- Fixed duplicated tabs and duplicated agent processes after the extension host is restarted (for example by "Restart Extensions"): sessions that are still running are picked up instead of being opened a second time
+
 ## 0.3.0
 
 - Added OpenCode support: its sessions appear in the list with their titles, resume with one click and show up in the New Session menu
