@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0
+
+- Added a status bar item with your usage limit in percent and the time until it resets; hover it for the limits of the active session's agent (5-hour, 7-day and so on, with bars and reset times); click it to refresh
+- The status bar item turns to the warning or error background from configurable usage percentages (`agentSessions.limits.warningPercent`, `agentSessions.limits.errorPercent`)
+- The limits can be turned off with `agentSessions.limits.enabled`: nothing is added to the status bar and no data is collected
+- For OpenCode sessions the status bar shows the tokens spent in the session (cost and breakdown in the tooltip)
+- Codex usage limits are read from local session files
+- Claude Code usage limits are available as an opt-in: you are asked once, or use `agentSessions.limits.claude.enabled`
+
 ## 0.3.1
 
 - Fixed duplicated tabs and duplicated agent processes after the extension host is restarted (for example by "Restart Extensions"): sessions that are still running are picked up instead of being opened a second time

@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { loadSqlite } from './sqlite';
 import { NewSessionPlan, SessionRecord, SessionSource, WatchTarget } from './types';
 
 interface SessionRow {
@@ -86,13 +87,5 @@ export class OpenCodeSource implements SessionSource {
     } finally {
       db?.close();
     }
-  }
-}
-
-function loadSqlite(): typeof import('node:sqlite') | undefined {
-  try {
-    return require('node:sqlite');
-  } catch {
-    return undefined;
   }
 }

@@ -9,3 +9,4 @@ package-lock.json
 CONTRIBUTING.md
 .gitignore
 images/**
+eslint.config.mjs

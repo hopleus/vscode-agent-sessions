@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { allAgents, enabledAgents } from './agents';
-import { ensureSupportedPlatform } from './platform';
+import { ensureSupportedPlatform, isSupportedPlatform } from './platform';
 import { CONFIG_SECTION } from './constants';
 import { SessionDto, StateMessage } from './protocol';
 import { SessionCatalog } from './sessions/catalog';
@@ -11,18 +11,23 @@ import { isSafeId, SessionRecord } from './sessions/types';
 import { DebouncedWatcher } from './sessions/watcher';
 import { OpenSessionsStore, PrefsStore } from './storage';
 import { TerminalManager } from './terminals';
+import { delay } from './util/delay';
 import { activeRoot, workspaceRoots } from './workspace';
 
 const RESTORE_STAGGER_MS = 400;
 
-function delay(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+export interface CurrentSession {
+  id: string;
+  agentId: string;
+  title: string;
 }
 
 export class SessionService implements vscode.Disposable {
   private readonly changed = new vscode.EventEmitter<void>();
+  private readonly activeChanged = new vscode.EventEmitter<void>();
   private readonly opening = new Set<string>();
   readonly onDidChange = this.changed.event;
+  readonly onDidChangeActiveSession = this.activeChanged.event;
 
   private readonly catalog: SessionCatalog;
   private readonly prefs: PrefsStore;
@@ -31,6 +36,7 @@ export class SessionService implements vscode.Disposable {
   private readonly watcher: DebouncedWatcher;
   private readonly subscriptions: vscode.Disposable[];
   private pollTimer: NodeJS.Timeout | undefined;
+  private lastActiveId: string | undefined;
 
   constructor(context: vscode.ExtensionContext) {
     this.catalog = new SessionCatalog([
@@ -44,10 +50,17 @@ export class SessionService implements vscode.Disposable {
     this.watcher = new DebouncedWatcher(() => this.changed.fire());
     this.subscriptions = [
       this.changed,
+      this.activeChanged,
       this.terminals,
       this.watcher,
-      this.terminals.onDidChange(() => this.changed.fire()),
-      vscode.window.onDidChangeActiveTerminal(() => void this.renameActiveTab()),
+      this.terminals.onDidChange(() => {
+        this.changed.fire();
+        this.notifyActiveChanged();
+      }),
+      vscode.window.onDidChangeActiveTerminal(() => {
+        void this.renameActiveTab();
+        this.notifyActiveChanged();
+      }),
       vscode.workspace.onDidChangeWorkspaceFolders(() => this.reload()),
       vscode.workspace.onDidChangeConfiguration(event => {
         if (event.affectsConfiguration(CONFIG_SECTION)) { this.reload(); }
@@ -81,6 +94,15 @@ export class SessionService implements vscode.Disposable {
     };
   }
 
+  async currentSession(): Promise<CurrentSession | undefined> {
+    const id = this.terminals.activeSessionId() ?? this.lastActiveId;
+    if (!id) { return undefined; }
+    const record = (await this.catalog.list(workspaceRoots())).find(candidate => candidate.id === id);
+    const agentId = record?.agentId ?? this.openSessions.list().find(session => session.id === id)?.agentId;
+    const title = this.prefs.get(id).name || record?.title;
+    return agentId && title ? { id, agentId, title } : undefined;
+  }
+
   warmUp(): void {
     void this.catalog.list(workspaceRoots());
   }
@@ -91,7 +113,7 @@ export class SessionService implements vscode.Disposable {
 
   async restore(): Promise<void> {
     const stored = this.openSessions.list();
-    if (stored.length === 0 || process.platform === 'win32') { return; }
+    if (stored.length === 0 || !isSupportedPlatform()) { return; }
     await this.terminals.waitUntilReady();
     const records = await this.catalog.list(workspaceRoots());
     const running = this.terminals.adoptRunning(stored);
@@ -172,6 +194,11 @@ export class SessionService implements vscode.Disposable {
     const records = known ?? await this.catalog.list(workspaceRoots());
     const title = this.prefs.get(id).name || records.find(record => record.id === id)?.title;
     if (title) { this.terminals.renameActive(title); }
+  }
+
+  private notifyActiveChanged(): void {
+    this.lastActiveId = this.terminals.activeSessionId() ?? this.lastActiveId;
+    this.activeChanged.fire();
   }
 
   private reload(): void {

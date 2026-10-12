@@ -6,6 +6,7 @@
 npm install
 npm run compile   # extension (tsc) + webview (esbuild)
 npm test          # unit tests
+npm run lint      # ESLint (typescript-eslint and style rules)
 ```
 
 Press F5 to start the Extension Development Host. It opens this repository as the workspace, so its own Claude sessions show up in the panel.

@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { VIEW_ID } from './constants';
 import { parseWebviewMessage } from './protocol';
 import { SessionService } from './sessionService';
+import { delay } from './util/delay';
 import { buildWebviewHtml } from './webviewHtml';
 
 export class SessionsView implements vscode.WebviewViewProvider, vscode.Disposable {
@@ -88,7 +89,3 @@ export class SessionsView implements vscode.WebviewViewProvider, vscode.Disposab
 }
 
 const REFRESH_FEEDBACK_MS = 300;
-
-function delay(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}

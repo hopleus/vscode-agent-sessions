@@ -18,6 +18,10 @@ interface CachedRollout extends FileStamp {
 const NEW_SESSION_CLOCK_SKEW_MS = 2000;
 const PROMPT_SEARCH_BYTES = 512 * 1024;
 
+export function codexHome(): string {
+  return process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
+}
+
 export class CodexSource implements SessionSource {
   readonly agentId = 'codex';
   private readonly cache = new Map<string, CachedRollout>();
@@ -61,7 +65,7 @@ export class CodexSource implements SessionSource {
   }
 
   private home(): string {
-    return process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
+    return codexHome();
   }
 
   private sessionsDir(): string {
