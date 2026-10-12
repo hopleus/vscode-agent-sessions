@@ -11,9 +11,6 @@ concurrency:
   group: release
   cancel-in-progress: false
 
-env:
-  TARGETS: darwin-arm64 darwin-x64 linux-x64 linux-arm64
-
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -41,12 +38,10 @@ jobs:
       - run: npm run compile
       - run: npm test
 
-      - name: Package for each platform
+      - name: Package the extension
         run: |
           mkdir -p dist
-          for target in ${TARGETS}; do
-            npx vsce package --target "${target}" --out dist/
-          done
+          npx vsce package --out dist/
           ls -la dist
 
       - name: Create the GitHub release

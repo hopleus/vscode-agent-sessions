@@ -47,6 +47,6 @@ Everything lives in `main`. Changes go in through pull requests, and releases ar
    git push origin v<version>
    ```
 
-The `Release` workflow checks that the tag matches `package.json` and points to a commit on `main`, runs the tests, builds a `.vsix` for each platform and attaches them to a GitHub release.
+The `Release` workflow checks that the tag matches `package.json` and points to a commit on `main`, runs the tests, builds a single `.vsix` and attaches it to a GitHub release.
 
-Publishing to the Marketplace is manual: download the `.vsix` files from the release, open the [publisher management page](https://marketplace.visualstudio.com/manage), choose **New extension → Visual Studio Code** (or **Update** on the existing extension) and upload each file.
+Publishing to the Marketplace is manual: download the `.vsix` from the release, open the [publisher management page](https://marketplace.visualstudio.com/manage), choose **New extension → Visual Studio Code** (or **Update** on the existing extension) and upload it.
