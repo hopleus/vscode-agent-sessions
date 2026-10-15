@@ -6,9 +6,10 @@ import { CLAUDE_AGENT_ID, CODEX_AGENT_ID, OPENCODE_AGENT_ID } from './limits/age
 import { fetchClaudeUsage, readCredentials } from './limits/claude';
 import { readCodexLimits } from './limits/codex';
 import { readOpenCodeTokens } from './limits/opencode';
-import { DEFAULT_THRESHOLDS, msUntilDisplayChange, Thresholds } from './limits/format';
+import { DEFAULT_THRESHOLDS, Thresholds } from './limits/format';
 import { nextClaudeBackoff, refreshIntervalMs } from './limits/policy';
 import { limitsOf, LimitsView, statusSeverity, statusText, tooltipMarkdown } from './limits/presentation';
+import { acquireUsageLock, readSharedUsage, writeSharedUsage } from './limits/shared';
 import { LimitsResult } from './limits/types';
 import { CONFIG_SECTION, REFRESH_LIMITS_COMMAND } from './constants';
 import { SessionService } from './sessionService';
@@ -29,15 +30,15 @@ export class LimitsStatusBar implements vscode.Disposable {
   private claudeNextAt = 0;
   private claudeBackoffMs = refreshIntervalMs(undefined);
   private codexAt = 0;
+  private claudeFetchedAt = 0;
   private lastManualAt = 0;
   private inFlight: Promise<void> | undefined;
   private timer: NodeJS.Timeout | undefined;
-  private clock: NodeJS.Timeout | undefined;
 
   constructor(
     private readonly service: SessionService,
-    private readonly userAgent: string,
     private readonly state: vscode.Memento,
+    private readonly storageDir: string,
   ) {}
 
   start(): void {
@@ -54,7 +55,6 @@ export class LimitsStatusBar implements vscode.Disposable {
 
   dispose(): void {
     clearInterval(this.timer);
-    clearTimeout(this.clock);
     this.subscriptions.forEach(subscription => subscription.dispose());
   }
 
@@ -89,8 +89,8 @@ export class LimitsStatusBar implements vscode.Disposable {
     }
     if (!this.claudeEnabled()) {
       this.claude = undefined;
-    } else if (this.shouldFetchClaude(force)) {
-      await this.refreshClaude();
+    } else {
+      await this.syncClaude(force);
     }
     await this.render();
   }
@@ -104,19 +104,52 @@ export class LimitsStatusBar implements vscode.Disposable {
   }
 
   private shouldFetchClaude(force: boolean): boolean {
-    return vscode.workspace.isTrusted
-      && (force || vscode.window.state.focused)
-      && Date.now() >= this.claudeNextAt - TICK_SLACK_MS;
+    const now = Date.now();
+    if (!vscode.workspace.isTrusted) { return false; }
+    if (force) { return now - this.claudeFetchedAt >= MANUAL_REFRESH_COOLDOWN_MS; }
+    return vscode.window.state.focused && now >= this.claudeNextAt - TICK_SLACK_MS;
+  }
+
+  private adoptShared(): void {
+    const shared = readSharedUsage(this.storageDir);
+    if (!shared || shared.fetchedAt <= this.claudeFetchedAt) { return; }
+    this.claude = shared.result;
+    this.claudeFetchedAt = shared.fetchedAt;
+    this.claudeNextAt = shared.nextAt;
+    this.claudeBackoffMs = shared.backoffMs;
+  }
+
+  private async syncClaude(force: boolean): Promise<void> {
+    this.adoptShared();
+    if (!this.shouldFetchClaude(force)) { return; }
+    const release = acquireUsageLock(this.storageDir);
+    if (!release) { return; }
+    try {
+      this.adoptShared();
+      if (!this.shouldFetchClaude(force)) { return; }
+      await this.refreshClaude();
+      writeSharedUsage(this.storageDir, {
+        result: this.claude as LimitsResult,
+        fetchedAt: this.claudeFetchedAt,
+        nextAt: this.claudeNextAt,
+        backoffMs: this.claudeBackoffMs,
+      });
+    } finally {
+      release();
+    }
   }
 
   private async refreshClaude(): Promise<void> {
-    const outcome = await fetchClaudeUsage({ readCredentials, fetch, now: Date.now, userAgent: this.userAgent });
-    this.claude = outcome.result;
+    const outcome = await fetchClaudeUsage({ readCredentials, fetch, now: Date.now });
+    if (!outcome.transient || this.claude?.kind !== 'ok' || outcome.result.kind === 'ok') {
+      this.claude = outcome.result;
+    }
     this.claudeBackoffMs = nextClaudeBackoff(this.claudeBackoffMs, {
       ok: outcome.result.kind === 'ok',
       retryAfterMs: outcome.retryAfterMs,
     }, this.intervalMs());
-    this.claudeNextAt = Date.now() + this.claudeBackoffMs;
+    this.claudeFetchedAt = Date.now();
+    this.claudeNextAt = this.claudeFetchedAt + this.claudeBackoffMs;
   }
 
   private async currentView(): Promise<LimitsView> {
@@ -142,17 +175,6 @@ export class LimitsStatusBar implements vscode.Disposable {
     this.item.tooltip = this.markdown(tooltipMarkdown(view));
     this.item.backgroundColor = this.backgroundFor(statusSeverity(view.result, view.thresholds));
     this.item.show();
-    this.scheduleClock(view);
-  }
-
-  private scheduleClock(view: LimitsView): void {
-    clearTimeout(this.clock);
-    const windows = limitsOf(view.result)?.windows ?? [];
-    const delays = windows
-      .map(window => msUntilDisplayChange(window.resetsAt, view.now))
-      .filter((delay): delay is number => delay !== undefined);
-    if (delays.length === 0) { return; }
-    this.clock = setTimeout(() => void this.render(), Math.max(1_000, Math.min(...delays)));
   }
 
   private markdown(content: string): vscode.MarkdownString {

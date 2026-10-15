@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.3
+
+- Claude usage is requested once for all open windows: they share the last result and the rate limit backoff
+- The last known Claude value stays on screen when Claude rate limits or is unreachable
+- The time until reset includes minutes for resets more than a day away (`3d 3h 12m`)
+
 ## 0.4.2
 
 - Usage limits are re-read when the window regains focus, and are refreshed every minute by default

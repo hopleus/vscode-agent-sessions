@@ -60,7 +60,7 @@ Agents you add yourself show up in the New Session menu. Their past sessions are
 Hover the status bar item to see your limits (click it to refresh):
 
 - **Codex:** read from your local Codex session files. It shows the last value Codex reported, so it updates when you use Codex.
-- **Claude Code:** the first time, you are asked whether to enable it (nothing is read before you agree). You can switch it with `agentSessions.limits.claude.enabled`. When enabled, the extension reads your Claude Code login (macOS Keychain or `~/.claude/.credentials.json`) and asks `api.anthropic.com` for your 5-hour and weekly usage, every minute by default (`agentSessions.limits.refreshMinutes`) while the window is focused. The token is used only for that request, never stored or logged. This endpoint is the one Claude Code's own `/usage` command uses, but it is not officially documented and may change. Available for Pro and Max subscriptions.
+- **Claude Code:** the first time, you are asked whether to enable it (nothing is read before you agree). You can switch it with `agentSessions.limits.claude.enabled`. When enabled, the extension reads your Claude Code login (macOS Keychain or `~/.claude/.credentials.json`) and asks `api.anthropic.com` for your 5-hour and weekly usage, every minute by default (`agentSessions.limits.refreshMinutes`) while a window is focused; all open windows share one request. The token is used only for that request, never stored or logged. This endpoint is the one Claude Code's own `/usage` command uses, but it is not officially documented and may change. Available for Pro and Max subscriptions.
 - **OpenCode:** has no subscription limits of its own, so the tokens spent in the active session (and their cost) are shown instead.
 
 ## Good to know

@@ -11,8 +11,8 @@ export class LimitsFeature implements vscode.Disposable {
 
   constructor(
     private readonly service: SessionService,
-    private readonly userAgent: string,
     private readonly state: vscode.Memento,
+    private readonly storageDir: string,
   ) {
     this.subscription = vscode.workspace.onDidChangeConfiguration(event => {
       if (event.affectsConfiguration(`${CONFIG_SECTION}.${ENABLED_SETTING}`)) { this.apply(); }
@@ -32,7 +32,7 @@ export class LimitsFeature implements vscode.Disposable {
   private apply(): void {
     const enabled = vscode.workspace.getConfiguration(CONFIG_SECTION).get<boolean>(ENABLED_SETTING, true);
     if (enabled && !this.bar) {
-      this.bar = new LimitsStatusBar(this.service, this.userAgent, this.state);
+      this.bar = new LimitsStatusBar(this.service, this.state, this.storageDir);
       this.bar.start();
     } else if (!enabled) {
       this.stop();

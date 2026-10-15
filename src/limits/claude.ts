@@ -5,6 +5,7 @@ import * as path from 'path';
 import { AgentLimits, LimitsResult, LimitWindow } from './types';
 
 const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage';
+const USER_AGENT = 'claude-code/2.1.131';
 const KEYCHAIN_SERVICE = 'Claude Code-credentials';
 const OAUTH_BETA = 'oauth-2025-04-20';
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -19,12 +20,12 @@ export interface UsageDeps {
   readCredentials(): Promise<Credentials | undefined>;
   fetch: typeof fetch;
   now(): number;
-  userAgent: string;
 }
 
 export interface ClaudeUsageOutcome {
   result: LimitsResult;
   retryAfterMs?: number;
+  transient?: boolean;
 }
 
 export function parseCredentials(raw: string): Credentials | undefined {
@@ -64,9 +65,10 @@ function readKeychain(): Promise<Credentials | undefined> {
 }
 
 export async function fetchClaudeUsage(deps: UsageDeps): Promise<ClaudeUsageOutcome> {
-  const unavailable = (reason: string, retryAfterMs?: number): ClaudeUsageOutcome => ({
+  const unavailable = (reason: string, retryAfterMs?: number, transient = false): ClaudeUsageOutcome => ({
     result: { kind: 'unavailable', agentId: 'claude', agentName: 'Claude', reason },
     retryAfterMs,
+    transient,
   });
   const credentials = await deps.readCredentials();
   if (!credentials) {
@@ -81,20 +83,20 @@ export async function fetchClaudeUsage(deps: UsageDeps): Promise<ClaudeUsageOutc
       headers: {
         Authorization: `Bearer ${credentials.accessToken}`,
         'anthropic-beta': OAUTH_BETA,
-        'User-Agent': deps.userAgent,
+        'User-Agent': USER_AGENT,
       },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch {
-    return unavailable('Could not reach api.anthropic.com.');
+    return unavailable('Could not reach api.anthropic.com.', undefined, true);
   }
   if (response.status === 401 || response.status === 403) {
     return unavailable('Claude rejected the stored login. Use Claude Code once to refresh it.');
   }
   if (response.status === 429) {
-    return unavailable('Claude is rate limiting usage requests. Will retry later.', retryAfterOf(response));
+    return unavailable('Claude is rate limiting usage requests. Will retry later.', retryAfterOf(response), true);
   }
-  if (!response.ok) { return unavailable(`Claude returned HTTP ${response.status}.`); }
+  if (!response.ok) { return unavailable(`Claude returned HTTP ${response.status}.`, undefined, true); }
   try {
     return { result: { kind: 'ok', limits: parseUsage((await response.json()) as UsageBody, credentials, deps.now()) } };
   } catch {

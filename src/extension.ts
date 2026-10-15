@@ -7,7 +7,7 @@ import { SessionsView } from './view';
 export function activate(context: vscode.ExtensionContext): void {
   const service = new SessionService(context);
   const view = new SessionsView(context.extensionUri, service);
-  const limits = new LimitsFeature(service, `hopl-agent-sessions/${context.extension.packageJSON.version}`, context.globalState);
+  const limits = new LimitsFeature(service, context.globalState, context.globalStorageUri.fsPath);
   context.subscriptions.push(
     service,
     view,

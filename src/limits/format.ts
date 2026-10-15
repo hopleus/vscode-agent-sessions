@@ -3,12 +3,18 @@ const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 const BAR_SVG_HEIGHT = 8;
 
+function days(left: number): string {
+  const hours = Math.floor((left % DAY_MS) / HOUR_MS);
+  const minutes = Math.floor((left % HOUR_MS) / MINUTE_MS);
+  return `${Math.floor(left / DAY_MS)}d ${hours}h ${minutes}m`;
+}
+
 export function formatRemaining(resetsAt: number | undefined, now: number): string {
   if (resetsAt === undefined) { return 'reset time unknown'; }
   const left = resetsAt - now;
   if (left <= 0) { return 'already reset'; }
   if (left >= DAY_MS) {
-    return `resets in ${Math.floor(left / DAY_MS)}d ${Math.floor((left % DAY_MS) / HOUR_MS)}h`;
+    return `resets in ${days(left)}`;
   }
   if (left >= HOUR_MS) {
     return `resets in ${Math.floor(left / HOUR_MS)}h ${Math.floor((left % HOUR_MS) / MINUTE_MS)}m`;
@@ -19,17 +25,9 @@ export function formatRemaining(resetsAt: number | undefined, now: number): stri
 export function formatRemainingShort(resetsAt: number | undefined, now: number): string | undefined {
   if (resetsAt === undefined || resetsAt <= now) { return undefined; }
   const left = resetsAt - now;
-  if (left >= DAY_MS) { return `${Math.floor(left / DAY_MS)}d ${Math.floor((left % DAY_MS) / HOUR_MS)}h`; }
+  if (left >= DAY_MS) { return days(left); }
   if (left >= HOUR_MS) { return `${Math.floor(left / HOUR_MS)}h ${Math.floor((left % HOUR_MS) / MINUTE_MS)}m`; }
   return `${Math.max(1, Math.ceil(left / MINUTE_MS))}m`;
-}
-
-export function msUntilDisplayChange(resetsAt: number | undefined, now: number): number | undefined {
-  if (resetsAt === undefined || resetsAt <= now) { return undefined; }
-  const left = resetsAt - now;
-  const unit = left >= DAY_MS ? HOUR_MS : MINUTE_MS;
-  const toBoundary = left % unit === 0 ? unit : left % unit;
-  return Math.min(left + 1, toBoundary + 1);
 }
 
 export function formatAge(timestamp: number | undefined, now: number): string {

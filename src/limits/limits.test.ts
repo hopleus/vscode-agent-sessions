@@ -82,7 +82,6 @@ describe('Claude usage', () => {
         return overrides.response ?? new Response('{}', { status: 200 });
       }) as typeof fetch,
       now: () => NOW,
-      userAgent: 'test-agent',
       ...overrides,
     };
   }
@@ -111,7 +110,7 @@ describe('Claude usage', () => {
     assert.deepEqual(outcome.result.limits.details, ['Extra usage: 12% of the monthly limit', 'Plan: max']);
     const headers = seen.headers as Record<string, string>;
     assert.equal(headers.Authorization, `Bearer ${TOKEN}`);
-    assert.equal(headers['User-Agent'], 'test-agent');
+    assert.equal(headers['User-Agent'], 'claude-code/2.1.131');
   });
 
   it('does not call the API when there is no login or it has expired', async () => {
@@ -149,7 +148,7 @@ describe('formatting', () => {
     assert.equal(formatRemaining(undefined, now), 'reset time unknown');
     assert.equal(formatRemaining(now - 1, now), 'already reset');
     assert.equal(formatRemaining(now + 90 * 60_000, now), 'resets in 1h 30m');
-    assert.equal(formatRemaining(now + (3 * 24 + 4) * 3_600_000, now), 'resets in 3d 4h');
+    assert.equal(formatRemaining(now + (3 * 24 + 4) * 3_600_000, now), 'resets in 3d 4h 0m');
     assert.equal(formatRemaining(now + 20_000, now), 'resets in 1m');
   });
 
@@ -193,7 +192,7 @@ describe('presentation', () => {
     const { statusText } = await import('./presentation');
     const window = (usedPercent: number, resetsAt?: number) => okResult('codex', [{ label: '7-day', usedPercent, resetsAt }]);
     assert.equal(statusText(window(41, now + 57 * 60_000), now), '41% - 57m');
-    assert.equal(statusText(window(61.6, now + (3 * 24 + 3) * 3_600_000), now), '62% - 3d 3h');
+    assert.equal(statusText(window(61.6, now + (3 * 24 + 3) * 3_600_000), now), '62% - 3d 3h 0m');
     assert.equal(statusText(window(30, now + (4 * 60 + 23) * 60_000), now), '30% - 4h 23m');
     assert.equal(statusText(window(50), now), '50%');
     assert.equal(statusText(window(50, now - 1), now), '50%');
@@ -319,15 +318,31 @@ describe('OpenCode token usage', () => {
   });
 });
 
-describe('msUntilDisplayChange', () => {
-  it('ticks at the next displayed boundary', async () => {
-    const { msUntilDisplayChange } = await import('./format');
-    const minute = 60_000;
-    const hour = 60 * minute;
-    assert.equal(msUntilDisplayChange(undefined, 0), undefined);
-    assert.equal(msUntilDisplayChange(0, 0), undefined);
-    assert.equal(msUntilDisplayChange(2 * hour + 30_000, 0), 30_001);
-    assert.equal(msUntilDisplayChange(25 * hour + 10 * minute, 0), 10 * minute + 1);
-    assert.equal(msUntilDisplayChange(500, 0), 501);
+describe('shared Claude usage cache', () => {
+  let dir: string;
+
+  beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-shared-')); });
+  afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }); });
+
+  it('round-trips and rejects broken files', async () => {
+    const { readSharedUsage, writeSharedUsage } = await import('./shared');
+    assert.equal(readSharedUsage(dir), undefined);
+    const usage = {
+      result: { kind: 'unavailable' as const, agentId: 'claude', agentName: 'Claude', reason: 'x' },
+      fetchedAt: 10, nextAt: 20, backoffMs: 5,
+    };
+    writeSharedUsage(dir, usage);
+    assert.deepEqual(readSharedUsage(dir), usage);
+    fs.writeFileSync(path.join(dir, 'claude-usage.json'), '{"fetchedAt":"x"}');
+    assert.equal(readSharedUsage(dir), undefined);
+  });
+
+  it('lets only one window fetch at a time and recovers a stale lock', async () => {
+    const { acquireUsageLock } = await import('./shared');
+    const first = acquireUsageLock(dir);
+    assert.ok(first);
+    assert.equal(acquireUsageLock(dir), undefined);
+    assert.ok(acquireUsageLock(dir, Date.now() + 60_000));
+    first();
   });
 });
