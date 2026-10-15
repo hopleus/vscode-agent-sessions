@@ -7,15 +7,17 @@ import { fetchClaudeUsage, readCredentials } from './limits/claude';
 import { readCodexLimits } from './limits/codex';
 import { readOpenCodeTokens } from './limits/opencode';
 import { DEFAULT_THRESHOLDS, msUntilDisplayChange, Thresholds } from './limits/format';
-import { CLAUDE_REFRESH_MS, nextClaudeBackoff } from './limits/policy';
+import { nextClaudeBackoff, refreshIntervalMs } from './limits/policy';
 import { limitsOf, LimitsView, statusSeverity, statusText, tooltipMarkdown } from './limits/presentation';
 import { LimitsResult } from './limits/types';
 import { CONFIG_SECTION, REFRESH_LIMITS_COMMAND } from './constants';
 import { SessionService } from './sessionService';
 
-const CODEX_REFRESH_MS = 2 * 60_000;
+const TICK_MS = 60_000;
+const TICK_SLACK_MS = 1_000;
 const MANUAL_REFRESH_COOLDOWN_MS = 5_000;
 const CLAUDE_SETTING = 'limits.claude.enabled';
+const INTERVAL_SETTING = 'limits.refreshMinutes';
 const PROMPTED_KEY = 'agentSessions.limitsPrompted';
 const TRUSTED_COMMANDS = ['workbench.action.openSettings', REFRESH_LIMITS_COMMAND];
 
@@ -25,7 +27,8 @@ export class LimitsStatusBar implements vscode.Disposable {
   private codex: LimitsResult | undefined;
   private claude: LimitsResult | undefined;
   private claudeNextAt = 0;
-  private claudeBackoffMs = CLAUDE_REFRESH_MS;
+  private claudeBackoffMs = refreshIntervalMs(undefined);
+  private codexAt = 0;
   private lastManualAt = 0;
   private inFlight: Promise<void> | undefined;
   private timer: NodeJS.Timeout | undefined;
@@ -42,11 +45,11 @@ export class LimitsStatusBar implements vscode.Disposable {
     this.subscriptions.push(
       this.service.onDidChangeActiveSession(() => void this.render()),
       vscode.workspace.onDidChangeConfiguration(event => this.onConfigurationChanged(event)),
-      vscode.window.onDidChangeWindowState(state => { if (state.focused) { void this.render(); } }),
+      vscode.window.onDidChangeWindowState(state => { if (state.focused) { void this.refresh(false); } }),
     );
     void this.refresh(true);
     void this.offerClaudeLimits();
-    this.timer = setInterval(() => void this.refresh(false), CODEX_REFRESH_MS);
+    this.timer = setInterval(() => void this.refresh(false), TICK_MS);
   }
 
   dispose(): void {
@@ -65,6 +68,11 @@ export class LimitsStatusBar implements vscode.Disposable {
 
   private onConfigurationChanged(event: vscode.ConfigurationChangeEvent): void {
     if (event.affectsConfiguration(`${CONFIG_SECTION}.${CLAUDE_SETTING}`)) { void this.refresh(true); }
+    if (event.affectsConfiguration(`${CONFIG_SECTION}.${INTERVAL_SETTING}`)) {
+      this.claudeBackoffMs = this.intervalMs();
+      this.claudeNextAt = 0;
+      void this.refresh(true);
+    }
     if (event.affectsConfiguration(`${CONFIG_SECTION}.limits.warningPercent`)
       || event.affectsConfiguration(`${CONFIG_SECTION}.limits.errorPercent`)) { void this.render(); }
   }
@@ -75,7 +83,10 @@ export class LimitsStatusBar implements vscode.Disposable {
   }
 
   private async doRefresh(force: boolean): Promise<void> {
-    this.codex = await readCodexLimits();
+    if (force || this.codexDue()) {
+      this.codexAt = Date.now();
+      this.codex = await readCodexLimits();
+    }
     if (!this.claudeEnabled()) {
       this.claude = undefined;
     } else if (this.shouldFetchClaude(force)) {
@@ -84,10 +95,18 @@ export class LimitsStatusBar implements vscode.Disposable {
     await this.render();
   }
 
+  private intervalMs(): number {
+    return refreshIntervalMs(vscode.workspace.getConfiguration(CONFIG_SECTION).get<number>(INTERVAL_SETTING));
+  }
+
+  private codexDue(): boolean {
+    return Date.now() - this.codexAt >= this.intervalMs() - TICK_SLACK_MS;
+  }
+
   private shouldFetchClaude(force: boolean): boolean {
     return vscode.workspace.isTrusted
       && (force || vscode.window.state.focused)
-      && Date.now() >= this.claudeNextAt;
+      && Date.now() >= this.claudeNextAt - TICK_SLACK_MS;
   }
 
   private async refreshClaude(): Promise<void> {
@@ -96,7 +115,7 @@ export class LimitsStatusBar implements vscode.Disposable {
     this.claudeBackoffMs = nextClaudeBackoff(this.claudeBackoffMs, {
       ok: outcome.result.kind === 'ok',
       retryAfterMs: outcome.retryAfterMs,
-    });
+    }, this.intervalMs());
     this.claudeNextAt = Date.now() + this.claudeBackoffMs;
   }
 

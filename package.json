@@ -7,7 +7,7 @@
     "color": "#1f2430",
     "theme": "dark"
   },
-  "version": "0.4.1",
+  "version": "0.4.2",
   "publisher": "hopleus",
   "license": "MIT",
   "repository": {
@@ -94,6 +94,13 @@
           "default": false,
           "scope": "application",
           "markdownDescription": "Show Claude Code usage limits (5-hour and weekly) in the status bar tooltip. When enabled, the extension reads your Claude Code login from the macOS Keychain or `~/.claude/.credentials.json` and asks `api.anthropic.com` for your usage. The token is only used for this request and is never stored or logged. The endpoint is not officially documented and may change."
+        },
+        "agentSessions.limits.refreshMinutes": {
+          "type": "number",
+          "default": 1,
+          "minimum": 1,
+          "maximum": 60,
+          "markdownDescription": "How often usage limits are refreshed, in minutes. Claude usage is requested from `api.anthropic.com` at this interval while the window is focused; after errors or rate limiting the interval grows automatically."
         },
         "agentSessions.limits.warningPercent": {
           "type": "number",

@@ -38,6 +38,7 @@ Most people never need to change anything. If you do:
 | --- | --- |
 | `agentSessions.agents` | Change an agent's command, turn it off, or add your own. |
 | `agentSessions.limits.enabled` | Show usage limits in the status bar (on by default). When off, nothing is added to the status bar and no limit data is collected. |
+| `agentSessions.limits.refreshMinutes` | How often usage limits are refreshed, 1–60 minutes (default 1). |
 | `agentSessions.limits.warningPercent` | Used percentage from which the status bar item turns to the warning background (default 80). |
 | `agentSessions.limits.errorPercent` | Used percentage from which it turns to the error background (default 95). |
 | `agentSessions.limits.claude.enabled` | Show Claude Code usage limits in the status bar tooltip (off by default, see Usage limits). |
@@ -59,7 +60,7 @@ Agents you add yourself show up in the New Session menu. Their past sessions are
 Hover the status bar item to see your limits (click it to refresh):
 
 - **Codex:** read from your local Codex session files. It shows the last value Codex reported, so it updates when you use Codex.
-- **Claude Code:** the first time, you are asked whether to enable it (nothing is read before you agree). You can switch it with `agentSessions.limits.claude.enabled`. When enabled, the extension reads your Claude Code login (macOS Keychain or `~/.claude/.credentials.json`) and asks `api.anthropic.com` for your 5-hour and weekly usage, about every five minutes. The token is used only for that request, never stored or logged. This endpoint is the one Claude Code's own `/usage` command uses, but it is not officially documented and may change. Available for Pro and Max subscriptions.
+- **Claude Code:** the first time, you are asked whether to enable it (nothing is read before you agree). You can switch it with `agentSessions.limits.claude.enabled`. When enabled, the extension reads your Claude Code login (macOS Keychain or `~/.claude/.credentials.json`) and asks `api.anthropic.com` for your 5-hour and weekly usage, every minute by default (`agentSessions.limits.refreshMinutes`) while the window is focused. The token is used only for that request, never stored or logged. This endpoint is the one Claude Code's own `/usage` command uses, but it is not officially documented and may change. Available for Pro and Max subscriptions.
 - **OpenCode:** has no subscription limits of its own, so the tokens spent in the active session (and their cost) are shown instead.
 
 ## Good to know

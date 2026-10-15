@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.2
+
+- Usage limits are re-read when the window regains focus, and are refreshed every minute by default
+- Added `agentSessions.limits.refreshMinutes` (1–60) to set the refresh interval
+
 ## 0.4.1
 
 - Fixed the time until reset in the status bar lagging behind: it now updates when the displayed minute or hour changes and when the window regains focus

@@ -255,12 +255,17 @@ describe('presentation', () => {
 
 describe('claude refresh policy', () => {
   it('keeps the normal interval after success and backs off after failures', async () => {
-    const { nextClaudeBackoff, CLAUDE_REFRESH_MS, MAX_BACKOFF_MS } = await import('./policy');
-    assert.equal(nextClaudeBackoff(CLAUDE_REFRESH_MS * 4, { ok: true }), CLAUDE_REFRESH_MS);
-    assert.equal(nextClaudeBackoff(CLAUDE_REFRESH_MS, { ok: false }), CLAUDE_REFRESH_MS * 2);
-    assert.equal(nextClaudeBackoff(MAX_BACKOFF_MS, { ok: false }), MAX_BACKOFF_MS);
-    assert.equal(nextClaudeBackoff(CLAUDE_REFRESH_MS, { ok: false, retryAfterMs: 20 * 60_000 }), 20 * 60_000);
-    assert.equal(nextClaudeBackoff(CLAUDE_REFRESH_MS, { ok: false, retryAfterMs: 1_000 }), CLAUDE_REFRESH_MS);
+    const { nextClaudeBackoff, MAX_BACKOFF_MS, refreshIntervalMs } = await import('./policy');
+    const CLAUDE_REFRESH_MS = refreshIntervalMs(1);
+    assert.equal(nextClaudeBackoff(CLAUDE_REFRESH_MS * 4, { ok: true }, CLAUDE_REFRESH_MS), CLAUDE_REFRESH_MS);
+    assert.equal(nextClaudeBackoff(CLAUDE_REFRESH_MS, { ok: false }, CLAUDE_REFRESH_MS), CLAUDE_REFRESH_MS * 2);
+    assert.equal(nextClaudeBackoff(MAX_BACKOFF_MS, { ok: false }, CLAUDE_REFRESH_MS), MAX_BACKOFF_MS);
+    assert.equal(nextClaudeBackoff(CLAUDE_REFRESH_MS, { ok: false, retryAfterMs: 20 * 60_000 }, CLAUDE_REFRESH_MS), 20 * 60_000);
+    assert.equal(nextClaudeBackoff(CLAUDE_REFRESH_MS, { ok: false, retryAfterMs: 1_000 }, CLAUDE_REFRESH_MS), CLAUDE_REFRESH_MS);
+    assert.equal(refreshIntervalMs(undefined), 60_000);
+    assert.equal(refreshIntervalMs(0), 60_000);
+    assert.equal(refreshIntervalMs(5), 5 * 60_000);
+    assert.equal(refreshIntervalMs(999), 60 * 60_000);
   });
 });
 
