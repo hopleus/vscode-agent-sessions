@@ -24,6 +24,14 @@ export function formatRemainingShort(resetsAt: number | undefined, now: number):
   return `${Math.max(1, Math.ceil(left / MINUTE_MS))}m`;
 }
 
+export function msUntilDisplayChange(resetsAt: number | undefined, now: number): number | undefined {
+  if (resetsAt === undefined || resetsAt <= now) { return undefined; }
+  const left = resetsAt - now;
+  const unit = left >= DAY_MS ? HOUR_MS : MINUTE_MS;
+  const toBoundary = left % unit === 0 ? unit : left % unit;
+  return Math.min(left + 1, toBoundary + 1);
+}
+
 export function formatAge(timestamp: number | undefined, now: number): string {
   if (timestamp === undefined) { return 'unknown time'; }
   const age = Math.max(0, now - timestamp);

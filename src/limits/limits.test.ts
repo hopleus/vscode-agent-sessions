@@ -313,3 +313,16 @@ describe('OpenCode token usage', () => {
     assert.ok(!text.includes('no usage limits'));
   });
 });
+
+describe('msUntilDisplayChange', () => {
+  it('ticks at the next displayed boundary', async () => {
+    const { msUntilDisplayChange } = await import('./format');
+    const minute = 60_000;
+    const hour = 60 * minute;
+    assert.equal(msUntilDisplayChange(undefined, 0), undefined);
+    assert.equal(msUntilDisplayChange(0, 0), undefined);
+    assert.equal(msUntilDisplayChange(2 * hour + 30_000, 0), 30_001);
+    assert.equal(msUntilDisplayChange(25 * hour + 10 * minute, 0), 10 * minute + 1);
+    assert.equal(msUntilDisplayChange(500, 0), 501);
+  });
+});

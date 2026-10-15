@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.1
+
+- Fixed the time until reset in the status bar lagging behind: it now updates when the displayed minute or hour changes and when the window regains focus
+
 ## 0.4.0
 
 - Added a status bar item with your usage limit in percent and the time until it resets; hover it for the limits of the active session's agent (5-hour, 7-day and so on, with bars and reset times); click it to refresh

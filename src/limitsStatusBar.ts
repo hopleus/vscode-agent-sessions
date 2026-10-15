@@ -6,7 +6,7 @@ import { CLAUDE_AGENT_ID, CODEX_AGENT_ID, OPENCODE_AGENT_ID } from './limits/age
 import { fetchClaudeUsage, readCredentials } from './limits/claude';
 import { readCodexLimits } from './limits/codex';
 import { readOpenCodeTokens } from './limits/opencode';
-import { DEFAULT_THRESHOLDS, Thresholds } from './limits/format';
+import { DEFAULT_THRESHOLDS, msUntilDisplayChange, Thresholds } from './limits/format';
 import { CLAUDE_REFRESH_MS, nextClaudeBackoff } from './limits/policy';
 import { limitsOf, LimitsView, statusSeverity, statusText, tooltipMarkdown } from './limits/presentation';
 import { LimitsResult } from './limits/types';
@@ -29,6 +29,7 @@ export class LimitsStatusBar implements vscode.Disposable {
   private lastManualAt = 0;
   private inFlight: Promise<void> | undefined;
   private timer: NodeJS.Timeout | undefined;
+  private clock: NodeJS.Timeout | undefined;
 
   constructor(
     private readonly service: SessionService,
@@ -41,6 +42,7 @@ export class LimitsStatusBar implements vscode.Disposable {
     this.subscriptions.push(
       this.service.onDidChangeActiveSession(() => void this.render()),
       vscode.workspace.onDidChangeConfiguration(event => this.onConfigurationChanged(event)),
+      vscode.window.onDidChangeWindowState(state => { if (state.focused) { void this.render(); } }),
     );
     void this.refresh(true);
     void this.offerClaudeLimits();
@@ -49,6 +51,7 @@ export class LimitsStatusBar implements vscode.Disposable {
 
   dispose(): void {
     clearInterval(this.timer);
+    clearTimeout(this.clock);
     this.subscriptions.forEach(subscription => subscription.dispose());
   }
 
@@ -120,6 +123,17 @@ export class LimitsStatusBar implements vscode.Disposable {
     this.item.tooltip = this.markdown(tooltipMarkdown(view));
     this.item.backgroundColor = this.backgroundFor(statusSeverity(view.result, view.thresholds));
     this.item.show();
+    this.scheduleClock(view);
+  }
+
+  private scheduleClock(view: LimitsView): void {
+    clearTimeout(this.clock);
+    const windows = limitsOf(view.result)?.windows ?? [];
+    const delays = windows
+      .map(window => msUntilDisplayChange(window.resetsAt, view.now))
+      .filter((delay): delay is number => delay !== undefined);
+    if (delays.length === 0) { return; }
+    this.clock = setTimeout(() => void this.render(), Math.max(1_000, Math.min(...delays)));
   }
 
   private markdown(content: string): vscode.MarkdownString {
