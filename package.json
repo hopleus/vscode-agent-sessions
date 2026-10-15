@@ -7,7 +7,7 @@
     "color": "#1f2430",
     "theme": "dark"
   },
-  "version": "0.4.3",
+  "version": "0.4.4",
   "publisher": "hopleus",
   "license": "MIT",
   "repository": {
@@ -102,19 +102,32 @@
           "maximum": 60,
           "markdownDescription": "How often usage limits are refreshed, in minutes. Claude usage is requested from `api.anthropic.com` at this interval while the window is focused; after errors or rate limiting the interval grows automatically."
         },
+        "agentSessions.limits.statusBarWindow": {
+          "type": "string",
+          "enum": [
+            "first",
+            "highest"
+          ],
+          "default": "first",
+          "enumDescriptions": [
+            "The agent's first limit window (for Claude, the 5-hour window).",
+            "The most used limit window of the agent."
+          ],
+          "markdownDescription": "Which usage limit window the status bar item shows. The text and the warning or error background follow it."
+        },
         "agentSessions.limits.warningPercent": {
           "type": "number",
           "default": 80,
           "minimum": 0,
           "maximum": 100,
-          "markdownDescription": "Used percentage of any usage limit from which the status bar item gets the warning background (yellow or orange, depends on the theme)."
+          "markdownDescription": "Used percentage of the limit shown in the status bar from which the status bar item gets the warning background (yellow or orange, depends on the theme)."
         },
         "agentSessions.limits.errorPercent": {
           "type": "number",
           "default": 95,
           "minimum": 0,
           "maximum": 100,
-          "markdownDescription": "Used percentage of any usage limit from which the status bar item gets the error background (red, depends on the theme). Should not be lower than the warning percentage."
+          "markdownDescription": "Used percentage of the limit shown in the status bar from which the status bar item gets the error background (red, depends on the theme). Should not be lower than the warning percentage."
         }
       }
     }

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.4
+
+- Fixed the status bar turning yellow at 0%: the warning and error background now follow the limit shown in the status bar, not the highest of all windows
+- Added `agentSessions.limits.statusBarWindow` (`first` or `highest`) to choose which limit the status bar shows and colors by
+
 ## 0.4.3
 
 - Claude usage is requested once for all open windows: they share the last result and the rate limit backoff

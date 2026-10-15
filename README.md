@@ -39,6 +39,7 @@ Most people never need to change anything. If you do:
 | `agentSessions.agents` | Change an agent's command, turn it off, or add your own. |
 | `agentSessions.limits.enabled` | Show usage limits in the status bar (on by default). When off, nothing is added to the status bar and no limit data is collected. |
 | `agentSessions.limits.refreshMinutes` | How often usage limits are refreshed, 1–60 minutes (default 1). |
+| `agentSessions.limits.statusBarWindow` | Which limit the status bar shows and colors by: `first` (Claude's 5-hour window, default) or `highest` (the most used one). |
 | `agentSessions.limits.warningPercent` | Used percentage from which the status bar item turns to the warning background (default 80). |
 | `agentSessions.limits.errorPercent` | Used percentage from which it turns to the error background (default 95). |
 | `agentSessions.limits.claude.enabled` | Show Claude Code usage limits in the status bar tooltip (off by default, see Usage limits). |

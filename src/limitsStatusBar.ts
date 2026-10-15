@@ -8,7 +8,7 @@ import { readCodexLimits } from './limits/codex';
 import { readOpenCodeTokens } from './limits/opencode';
 import { DEFAULT_THRESHOLDS, Thresholds } from './limits/format';
 import { nextClaudeBackoff, refreshIntervalMs } from './limits/policy';
-import { limitsOf, LimitsView, statusSeverity, statusText, tooltipMarkdown } from './limits/presentation';
+import { limitsOf, LimitsView, StatusWindowMode, statusSeverity, statusText, tooltipMarkdown } from './limits/presentation';
 import { acquireUsageLock, readSharedUsage, writeSharedUsage } from './limits/shared';
 import { LimitsResult } from './limits/types';
 import { CONFIG_SECTION, REFRESH_LIMITS_COMMAND } from './constants';
@@ -19,6 +19,7 @@ const TICK_SLACK_MS = 1_000;
 const MANUAL_REFRESH_COOLDOWN_MS = 5_000;
 const CLAUDE_SETTING = 'limits.claude.enabled';
 const INTERVAL_SETTING = 'limits.refreshMinutes';
+const WINDOW_SETTING = 'limits.statusBarWindow';
 const PROMPTED_KEY = 'agentSessions.limitsPrompted';
 const TRUSTED_COMMANDS = ['workbench.action.openSettings', REFRESH_LIMITS_COMMAND];
 
@@ -73,7 +74,8 @@ export class LimitsStatusBar implements vscode.Disposable {
       this.claudeNextAt = 0;
       void this.refresh(true);
     }
-    if (event.affectsConfiguration(`${CONFIG_SECTION}.limits.warningPercent`)
+    if (event.affectsConfiguration(`${CONFIG_SECTION}.${WINDOW_SETTING}`)
+      || event.affectsConfiguration(`${CONFIG_SECTION}.limits.warningPercent`)
       || event.affectsConfiguration(`${CONFIG_SECTION}.limits.errorPercent`)) { void this.render(); }
   }
 
@@ -93,6 +95,11 @@ export class LimitsStatusBar implements vscode.Disposable {
       await this.syncClaude(force);
     }
     await this.render();
+  }
+
+  private windowMode(): StatusWindowMode {
+    const value = vscode.workspace.getConfiguration(CONFIG_SECTION).get<string>(WINDOW_SETTING);
+    return value === 'highest' ? 'highest' : 'first';
   }
 
   private intervalMs(): number {
@@ -171,9 +178,9 @@ export class LimitsStatusBar implements vscode.Disposable {
     const view = await this.currentView();
     this.item.text = view.agentId === OPENCODE_AGENT_ID
       ? (view.tokens ? statusText(view.result, view.now, view.tokens) : '–')
-      : statusText(view.result, view.now);
+      : statusText(view.result, view.now, undefined, this.windowMode());
     this.item.tooltip = this.markdown(tooltipMarkdown(view));
-    this.item.backgroundColor = this.backgroundFor(statusSeverity(view.result, view.thresholds));
+    this.item.backgroundColor = this.backgroundFor(statusSeverity(view.result, view.thresholds, this.windowMode()));
     this.item.show();
   }
 

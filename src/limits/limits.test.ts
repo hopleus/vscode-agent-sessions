@@ -200,10 +200,13 @@ describe('presentation', () => {
     assert.equal(statusText({ kind: 'unavailable', agentId: 'claude', agentName: 'Claude', reason: 'x' }, now), '–%');
   });
 
-  it('classifies the status bar severity by the highest window', async () => {
+  it('classifies the status bar severity by the window shown in the status bar', async () => {
     const { statusSeverity } = await import('./presentation');
-    const result = okResult('claude', [{ label: 'a', usedPercent: 40 }, { label: 'b', usedPercent: 96 }]);
+    const result = okResult('claude', [{ label: 'a', usedPercent: 96 }, { label: 'b', usedPercent: 40 }]);
     assert.equal(statusSeverity(result, thresholds), 'error');
+    const quiet = okResult('claude', [{ label: 'a', usedPercent: 0 }, { label: 'b', usedPercent: 82 }]);
+    assert.equal(statusSeverity(quiet, thresholds), 'ok');
+    assert.equal(statusSeverity(quiet, thresholds, 'highest'), 'warning');
     assert.equal(statusSeverity(okResult('claude', [{ label: 'a', usedPercent: 81 }]), thresholds), 'warning');
     assert.equal(statusSeverity(undefined, thresholds), 'ok');
   });

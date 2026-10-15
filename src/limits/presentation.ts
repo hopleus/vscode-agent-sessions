@@ -1,6 +1,6 @@
 import { CLAUDE_AGENT_ID, CLAUDE_USAGE_PAGE, CODEX_AGENT_ID, limitsAgentName, OPENCODE_AGENT_ID } from './agents';
 import { formatAge, formatRemaining, formatRemainingShort, formatTokens, progressBarImage, severityOf, Thresholds } from './format';
-import { AgentLimits, LimitsResult, TokenUsage } from './types';
+import { AgentLimits, LimitsResult, LimitWindow, TokenUsage } from './types';
 
 export const ENABLE_CLAUDE_LINK =
   'command:workbench.action.openSettings?%5B%22agentSessions.limits.claude.enabled%22%5D';
@@ -24,18 +24,27 @@ export function totalTokens(tokens: TokenUsage): number {
   return tokens.input + tokens.output + tokens.reasoning;
 }
 
-export function statusText(result: LimitsResult | undefined, now: number, tokens?: TokenUsage): string {
+export type StatusWindowMode = 'first' | 'highest';
+
+export function statusWindow(result: LimitsResult | undefined, mode: StatusWindowMode = 'first'): LimitWindow | undefined {
+  const windows = limitsOf(result)?.windows ?? [];
+  if (mode === 'first') { return windows[0]; }
+  return windows.reduce<LimitWindow | undefined>((best, window) =>
+    !best || window.usedPercent > best.usedPercent ? window : best, undefined);
+}
+
+export function statusText(result: LimitsResult | undefined, now: number, tokens?: TokenUsage, mode: StatusWindowMode = 'first'): string {
   if (tokens) { return `${formatTokens(totalTokens(tokens))} tokens`; }
-  const primary = limitsOf(result)?.windows[0];
+  const primary = statusWindow(result, mode);
   if (!primary) { return '–%'; }
   const percent = `${Math.round(primary.usedPercent)}%`;
   const remaining = formatRemainingShort(primary.resetsAt, now);
   return remaining ? `${percent} - ${remaining}` : percent;
 }
 
-export function statusSeverity(result: LimitsResult | undefined, thresholds: Thresholds): 'ok' | 'warning' | 'error' {
-  const percents = limitsOf(result)?.windows.map(window => window.usedPercent) ?? [];
-  return severityOf(Math.max(0, ...percents), thresholds);
+export function statusSeverity(result: LimitsResult | undefined, thresholds: Thresholds, mode: StatusWindowMode = 'first'): 'ok' | 'warning' | 'error' {
+  const primary = statusWindow(result, mode);
+  return severityOf(primary?.usedPercent ?? 0, thresholds);
 }
 
 export function tooltipMarkdown(view: LimitsView): string {
