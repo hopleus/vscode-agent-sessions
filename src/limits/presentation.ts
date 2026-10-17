@@ -1,6 +1,6 @@
 import { CLAUDE_AGENT_ID, CLAUDE_USAGE_PAGE, CODEX_AGENT_ID, limitsAgentName, OPENCODE_AGENT_ID } from './agents';
-import { formatAge, formatRemaining, formatRemainingShort, formatTokens, progressBarImage, severityOf, Thresholds } from './format';
-import { AgentLimits, LimitsResult, LimitWindow, TokenUsage } from './types';
+import { formatAge, formatMoney, formatRemaining, formatRemainingShort, formatTokens, progressBarImage, severityOf, Thresholds } from './format';
+import { AgentLimits, ExtraUsage, LimitsResult, LimitWindow, TokenUsage } from './types';
 
 export const ENABLE_CLAUDE_LINK =
   'command:workbench.action.openSettings?%5B%22agentSessions.limits.claude.enabled%22%5D';
@@ -89,7 +89,21 @@ function limitLines(limits: AgentLimits, view: LimitsView): string[] {
     lines.push(`![${percent}%](${progressBarImage(percent, view.thresholds)})`);
     lines.push(`_${formatRemaining(window.resetsAt, view.now)}_`);
   }
+  if (limits.extraUsage) { lines.push(...extraUsageLines(limits.extraUsage, view)); }
   limits.details.forEach(detail => lines.push(escapeMarkdown(detail)));
+  return lines;
+}
+
+function extraUsageLines(extra: ExtraUsage, view: LimitsView): string[] {
+  const percent = Math.round(extra.usedPercent);
+  const lines = [
+    `Extra usage &nbsp;|&nbsp; **${percent}%**`,
+    `![${percent}%](${progressBarImage(percent, view.thresholds)})`,
+  ];
+  if (extra.used !== undefined) {
+    const used = formatMoney(extra.used, extra.currency);
+    lines.push(`_${extra.limit ? `${used} of ${formatMoney(extra.limit, extra.currency)} spent` : `${used} spent`}_`);
+  }
   return lines;
 }
 

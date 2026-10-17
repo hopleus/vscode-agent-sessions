@@ -11,7 +11,7 @@ You start a session, switch branches, close the window, and a few days later you
 - **All your agents in one list.** Claude Code, Codex and OpenCode sessions side by side, each with its own icon and the time of the last activity.
 - **Back in the conversation in one click.** Click a session and it resumes in an editor tab, named after the session. No terminal commands to remember.
 - **New session, your agent.** Press **New Session** to start the selected agent right in your project. Switch agents from the dropdown next to the button.
-- **Your sessions, your way.** Pin the ones you keep coming back to and rename the ones with unhelpful titles. Right-click a session.
+- **Your sessions, your way.** Pin the ones you keep coming back to and rename the ones with unhelpful titles. Right-click a session. Claude sessions can also be reopened with or without Claude in Chrome (`--chrome`) from the same menu; the choice is remembered for that session.
 - **Nothing gets lost.** Close VS Code with a few sessions open and they come back when you reopen the project.
 - **Limits at a glance.** The status bar shows how much of your usage limit is used. Hover it to see the windows and when they reset; the tooltip follows the agent of the session you are in.
 - **Titles you already know.** Names come from the agents: Claude Code's AI titles and `/rename`, Codex thread names and OpenCode session titles.
@@ -61,7 +61,7 @@ Agents you add yourself show up in the New Session menu. Their past sessions are
 Hover the status bar item to see your limits (click it to refresh):
 
 - **Codex:** read from your local Codex session files. It shows the last value Codex reported, so it updates when you use Codex.
-- **Claude Code:** the first time, you are asked whether to enable it (nothing is read before you agree). You can switch it with `agentSessions.limits.claude.enabled`. When enabled, the extension reads your Claude Code login (macOS Keychain or `~/.claude/.credentials.json`) and asks `api.anthropic.com` for your 5-hour and weekly usage, every minute by default (`agentSessions.limits.refreshMinutes`) while a window is focused; all open windows share one request. The token is used only for that request, never stored or logged. This endpoint is the one Claude Code's own `/usage` command uses, but it is not officially documented and may change. Available for Pro and Max subscriptions.
+- **Claude Code:** the first time, you are asked whether to enable it (nothing is read before you agree). You can switch it with `agentSessions.limits.claude.enabled`. When enabled, the extension reads your Claude Code login (macOS Keychain or `~/.claude/.credentials.json`) and asks `api.anthropic.com` for your 5-hour and weekly usage (and your extra usage spend, if extra usage is turned on), every minute by default (`agentSessions.limits.refreshMinutes`) while a window is focused; all open windows share one request. The token is used only for that request, never stored or logged. This endpoint is the one Claude Code's own `/usage` command uses, but it is not officially documented and may change. Available for Pro and Max subscriptions.
 - **OpenCode:** has no subscription limits of its own, so the tokens spent in the active session (and their cost) are shown instead.
 
 ## Good to know

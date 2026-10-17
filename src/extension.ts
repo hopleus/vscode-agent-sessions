@@ -15,6 +15,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.registerWebviewViewProvider(VIEW_ID, view),
     vscode.commands.registerCommand(REFRESH_COMMAND, () => view.refresh()),
     vscode.commands.registerCommand(REFRESH_LIMITS_COMMAND, () => limits.refresh()),
+    ...view.registerSessionCommands(),
   );
   service.warmUp();
   void service.restore();

@@ -4,10 +4,18 @@ export interface LimitWindow {
   resetsAt?: number;
 }
 
+export interface ExtraUsage {
+  usedPercent: number;
+  used?: number;
+  limit?: number;
+  currency: string;
+}
+
 export interface AgentLimits {
   agentId: string;
   agentName: string;
   windows: LimitWindow[];
+  extraUsage?: ExtraUsage;
   details: string[];
   observedAt?: number;
 }

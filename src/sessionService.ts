@@ -4,7 +4,7 @@ import { ensureSupportedPlatform, isSupportedPlatform } from './platform';
 import { CONFIG_SECTION } from './constants';
 import { SessionDto, StateMessage } from './protocol';
 import { SessionCatalog } from './sessions/catalog';
-import { ClaudeSource } from './sessions/claude';
+import { ClaudeSource, usesChrome, withChrome } from './sessions/claude';
 import { CodexSource } from './sessions/codex';
 import { OpenCodeSource } from './sessions/opencode';
 import { isSafeId, SessionRecord } from './sessions/types';
@@ -15,6 +15,7 @@ import { delay } from './util/delay';
 import { activeRoot, workspaceRoots } from './workspace';
 
 const RESTORE_STAGGER_MS = 400;
+const CLAUDE_AGENT_ID = 'claude';
 
 export interface CurrentSession {
   id: string;
@@ -163,6 +164,19 @@ export class SessionService implements vscode.Disposable {
     this.changed.fire();
   }
 
+  async reopenWithChrome(id: string, enabled: boolean): Promise<void> {
+    if (!isSafeId(id) || !ensureSupportedPlatform()) { return; }
+    await this.prefs.update(id, { chrome: enabled });
+    this.opening.add(id);
+    try {
+      await this.terminals.close(id);
+      this.openWith(id, CLAUDE_AGENT_ID, await this.catalog.list(workspaceRoots()));
+    } finally {
+      this.opening.delete(id);
+    }
+    this.changed.fire();
+  }
+
   private toDto(session: SessionRecord): SessionDto {
     const prefs = this.prefs.get(session.id);
     return {
@@ -171,14 +185,24 @@ export class SessionService implements vscode.Disposable {
       title: prefs.name || session.title,
       updatedAt: session.updatedAt,
       pinned: !!prefs.pinned,
+      chrome: session.agentId === CLAUDE_AGENT_ID ? this.chromeEnabled(session.id) : undefined,
     };
+  }
+
+  private chromeEnabled(id: string): boolean {
+    return this.prefs.get(id).chrome ?? usesChrome(this.agentCommand(CLAUDE_AGENT_ID) ?? '');
+  }
+
+  private agentCommand(agentId: string): string | undefined {
+    return allAgents().find(agent => agent.id === agentId)?.command;
   }
 
   private openWith(id: string, agentId: string, records: SessionRecord[]): void {
     const record = records.find(candidate => candidate.id === id);
     const cwd = record?.cwd ?? this.usableRoot();
     const source = this.catalog.sourceFor(agentId);
-    const command = allAgents().find(agent => agent.id === agentId)?.command;
+    const base = this.agentCommand(agentId);
+    const command = base && agentId === CLAUDE_AGENT_ID ? withChrome(base, this.prefs.get(id).chrome) : base;
     if (!cwd || !vscode.workspace.isTrusted || !source || !command || !isSafeId(id) || this.terminals.show(id)) { return; }
     const title = this.prefs.get(id).name || record?.title;
     this.terminals.openExisting(agentId, id, title, source.resumeCommand(command, id), cwd);

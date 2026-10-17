@@ -30,6 +30,16 @@ export function formatRemainingShort(resetsAt: number | undefined, now: number):
   return `${Math.max(1, Math.ceil(left / MINUTE_MS))}m`;
 }
 
+export function formatMoney(minorUnits: number, currency: string): string {
+  try {
+    const format = new Intl.NumberFormat('en-US', { style: 'currency', currency });
+    const digits = format.resolvedOptions().maximumFractionDigits ?? 2;
+    return format.format(minorUnits / 10 ** digits);
+  } catch {
+    return `${(minorUnits / 100).toFixed(2)} ${currency}`;
+  }
+}
+
 export function formatAge(timestamp: number | undefined, now: number): string {
   if (timestamp === undefined) { return 'unknown time'; }
   const age = Math.max(0, now - timestamp);

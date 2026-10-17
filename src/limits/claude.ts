@@ -2,7 +2,7 @@ import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { AgentLimits, LimitsResult, LimitWindow } from './types';
+import { AgentLimits, ExtraUsage, LimitsResult, LimitWindow } from './types';
 
 const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage';
 const USER_AGENT = 'claude-code/2.1.131';
@@ -113,7 +113,13 @@ interface UsageBody {
   five_hour?: UsageQuota | null;
   seven_day?: UsageQuota | null;
   seven_day_sonnet?: UsageQuota | null;
-  extra_usage?: { is_enabled?: unknown; utilization?: unknown } | null;
+  extra_usage?: {
+    is_enabled?: unknown;
+    monthly_limit?: unknown;
+    used_credits?: unknown;
+    utilization?: unknown;
+    currency?: unknown;
+  } | null;
 }
 
 function parseUsage(body: UsageBody | null, credentials: Credentials, now: number): AgentLimits {
@@ -127,12 +133,20 @@ function parseUsage(body: UsageBody | null, credentials: Credentials, now: numbe
   add('7-day', body?.seven_day);
   add('7-day Sonnet', body?.seven_day_sonnet);
   const details: string[] = [];
-  const extra = body?.extra_usage;
-  if (extra?.is_enabled && typeof extra.utilization === 'number') {
-    details.push(`Extra usage: ${Math.round(extra.utilization)}% of the monthly limit`);
-  }
   if (credentials.subscriptionType) { details.push(`Plan: ${credentials.subscriptionType}`); }
-  return { agentId: 'claude', agentName: 'Claude', windows, details, observedAt: now };
+  return { agentId: 'claude', agentName: 'Claude', windows, extraUsage: parseExtraUsage(body?.extra_usage), details, observedAt: now };
+}
+
+function parseExtraUsage(extra: UsageBody['extra_usage']): ExtraUsage | undefined {
+  if (!extra) { return undefined; }
+  const amount = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
+  const limit = amount(extra.monthly_limit);
+  const used = amount(extra.used_credits);
+  if (extra.is_enabled !== true && !limit) { return undefined; }
+  const percent = amount(extra.utilization) ?? (limit && used !== undefined ? (used / limit) * 100 : undefined);
+  if (percent === undefined) { return undefined; }
+  const currency = typeof extra.currency === 'string' && /^[A-Z]{3}$/.test(extra.currency) ? extra.currency : 'USD';
+  return { usedPercent: percent, used, limit, currency };
 }
 
 function retryAfterOf(response: Response): number | undefined {

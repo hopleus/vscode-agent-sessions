@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0
+
+- The session context menu is now the native VS Code menu (Pin or Unpin, Rename, and the Chrome items below)
+- Claude sessions can be reopened with or without Claude in Chrome (`--chrome`) from the context menu; the choice is remembered for that session and the global agent command is left as is
+- The Claude usage tooltip shows an extra usage bar with the money spent and the monthly limit whenever extra usage is turned on
+
 ## 0.4.4
 
 - Fixed the status bar turning yellow at 0%: the warning and error background now follow the limit shown in the status bar, not the highest of all windows

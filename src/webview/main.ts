@@ -1,6 +1,6 @@
 import '@vscode-elements/elements/dist/bundled.js';
 import type { AgentDto, SessionDto, StateMessage } from '../protocol';
-import { AgentMenu, SessionMenu } from './menus';
+import { AgentMenu } from './menus';
 import { renderApp } from './render';
 import { vscode } from './vscodeApi';
 
@@ -13,10 +13,6 @@ let expanded = false;
 const collapsedGroups = new Set<string>();
 let chosenAgentId = vscode.getState()?.agentId;
 
-const sessionMenu = new SessionMenu({
-  togglePin: session => vscode.postMessage({ type: 'pin', id: session.id, pinned: !session.pinned }),
-  rename: session => vscode.postMessage({ type: 'rename', id: session.id, title: session.title }),
-});
 const agentMenu = new AgentMenu();
 
 function currentAgent(): AgentDto | undefined {
@@ -48,7 +44,6 @@ function sessionById(id: string | undefined): SessionDto | undefined {
 }
 
 function closeMenus(): void {
-  sessionMenu.close();
   agentMenu.close();
 }
 
@@ -94,16 +89,8 @@ app.addEventListener('keydown', event => {
   if (session) { openSession(session); }
 });
 
-app.addEventListener('contextmenu', event => {
-  const session = sessionById(sessionRowOf(event)?.dataset.id);
-  if (!session) { return; }
-  event.preventDefault();
-  sessionMenu.open(session, event.clientX, event.clientY);
-}, true);
-
 document.addEventListener('click', event => {
   const target = event.target as Element;
-  if (!sessionMenu.contains(target)) { sessionMenu.close(); }
   if (!agentMenu.contains(target)) { agentMenu.close(); }
 });
 window.addEventListener('blur', closeMenus);

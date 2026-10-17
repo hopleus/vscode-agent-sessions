@@ -9,6 +9,7 @@ export interface SessionDto {
   title: string;
   updatedAt: number;
   pinned: boolean;
+  chrome?: boolean;
 }
 
 export interface StateMessage {
@@ -21,9 +22,19 @@ export interface StateMessage {
 export type WebviewMessage =
   | { type: 'ready' }
   | { type: 'open'; id: string; agentId: string }
-  | { type: 'new'; agentId?: string }
-  | { type: 'pin'; id: string; pinned: boolean }
-  | { type: 'rename'; id: string; title: string };
+  | { type: 'new'; agentId?: string };
+
+export const SESSION_SECTION = 'agentSessions.session';
+
+export interface SessionContext {
+  webviewSection: typeof SESSION_SECTION;
+  sessionId: string;
+  sessionAgent: string;
+  sessionTitle: string;
+  sessionPinned: boolean;
+  sessionChrome: boolean;
+  preventDefaultContextMenuItems: true;
+}
 
 export function parseWebviewMessage(raw: unknown): WebviewMessage | undefined {
   if (typeof raw !== 'object' || raw === null) { return undefined; }
@@ -39,17 +50,17 @@ export function parseWebviewMessage(raw: unknown): WebviewMessage | undefined {
       return message.agentId === undefined || isString(message.agentId)
         ? { type: 'new', agentId: message.agentId }
         : undefined;
-    case 'pin':
-      return isString(message.id) && typeof message.pinned === 'boolean'
-        ? { type: 'pin', id: message.id, pinned: message.pinned }
-        : undefined;
-    case 'rename':
-      return isString(message.id) && isString(message.title)
-        ? { type: 'rename', id: message.id, title: message.title }
-        : undefined;
     default:
       return undefined;
   }
+}
+
+export function parseSessionContext(raw: unknown): SessionContext | undefined {
+  if (typeof raw !== 'object' || raw === null) { return undefined; }
+  const context = raw as Record<string, unknown>;
+  const valid = context.webviewSection === SESSION_SECTION && isString(context.sessionId) && isString(context.sessionAgent)
+    && typeof context.sessionTitle === 'string';
+  return valid ? context as unknown as SessionContext : undefined;
 }
 
 function isString(value: unknown): value is string {

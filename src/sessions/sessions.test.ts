@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, it } from 'node:test';
-import { ClaudeSource } from './claude';
+import { ClaudeSource, usesChrome, withChrome } from './claude';
 import { CodexSource } from './codex';
 import { lastValue, readEdges } from './jsonl';
 import { isSafeId } from './types';
@@ -204,5 +204,17 @@ describe('CodexSource watch filter', () => {
     } finally {
       if (previousHome === undefined) { delete process.env.CODEX_HOME; } else { process.env.CODEX_HOME = previousHome; }
     }
+  });
+});
+
+describe('Claude in Chrome flag', () => {
+  it('detects and replaces the flag in the agent command', () => {
+    assert.equal(usesChrome('claude --chrome'), true);
+    assert.equal(usesChrome('claude --no-chrome'), false);
+    assert.equal(usesChrome('claude'), false);
+    assert.equal(withChrome('claude', undefined), 'claude');
+    assert.equal(withChrome('claude', true), 'claude --chrome');
+    assert.equal(withChrome('claude --chrome --model opus', false), 'claude --model opus --no-chrome');
+    assert.equal(withChrome('claude --no-chrome', true), 'claude --chrome');
   });
 });

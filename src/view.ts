@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import { VIEW_ID } from './constants';
-import { parseWebviewMessage } from './protocol';
+import { SESSION_COMMANDS, VIEW_ID } from './constants';
+import { parseSessionContext, parseWebviewMessage, SessionContext } from './protocol';
 import { SessionService } from './sessionService';
 import { delay } from './util/delay';
 import { buildWebviewHtml } from './webviewHtml';
@@ -37,6 +37,21 @@ export class SessionsView implements vscode.WebviewViewProvider, vscode.Disposab
     this.subscription.dispose();
   }
 
+  registerSessionCommands(): vscode.Disposable[] {
+    const on = (command: string, run: (session: SessionContext) => Thenable<void> | Promise<void>) =>
+      vscode.commands.registerCommand(command, async (raw: unknown) => {
+        const session = parseSessionContext(raw);
+        if (session) { await run(session); }
+      });
+    return [
+      on(SESSION_COMMANDS.pin, session => this.service.setPinned(session.sessionId, true)),
+      on(SESSION_COMMANDS.unpin, session => this.service.setPinned(session.sessionId, false)),
+      on(SESSION_COMMANDS.rename, session => this.promptRename(session.sessionId, session.sessionTitle)),
+      on(SESSION_COMMANDS.reopenWithChrome, session => this.service.reopenWithChrome(session.sessionId, true)),
+      on(SESSION_COMMANDS.reopenWithoutChrome, session => this.service.reopenWithChrome(session.sessionId, false)),
+    ];
+  }
+
   refresh(): Thenable<void> {
     return this.pushWithProgress(REFRESH_FEEDBACK_MS);
   }
@@ -69,12 +84,6 @@ export class SessionsView implements vscode.WebviewViewProvider, vscode.Disposab
         break;
       case 'new':
         this.service.startNew(message.agentId);
-        break;
-      case 'pin':
-        await this.service.setPinned(message.id, message.pinned);
-        break;
-      case 'rename':
-        await this.promptRename(message.id, message.title);
         break;
     }
   }

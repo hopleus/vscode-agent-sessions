@@ -1,4 +1,4 @@
-import type { AgentDto, SessionDto, StateMessage } from '../protocol';
+import { SESSION_SECTION, type AgentDto, type SessionContext, type SessionDto, type StateMessage } from '../protocol';
 import { escapeHtml, timeAgo } from './format';
 import { agentIcon } from './icons';
 
@@ -51,11 +51,24 @@ function renderGroup(
 
 function renderSession(session: SessionDto, selectedId: string | undefined): string {
   const selected = session.id === selectedId ? ' selected' : '';
-  return `<vscode-tree-item data-id="${escapeHtml(session.id)}"${selected}>` +
+  return `<vscode-tree-item data-id="${escapeHtml(session.id)}"` +
+    ` data-vscode-context="${escapeHtml(JSON.stringify(sessionContext(session)))}"${selected}>` +
     `<span slot="icon-leaf" class="ico">${agentIcon(session.agentId)}</span>` +
     `<span class="title">${escapeHtml(session.title)}</span>` +
     `<span slot="decoration" class="time">${timeAgo(session.updatedAt)}</span>` +
     '</vscode-tree-item>';
+}
+
+function sessionContext(session: SessionDto): SessionContext {
+  return {
+    webviewSection: SESSION_SECTION,
+    sessionId: session.id,
+    sessionAgent: session.agentId,
+    sessionTitle: session.title,
+    sessionPinned: session.pinned,
+    sessionChrome: session.chrome === true,
+    preventDefaultContextMenuItems: true,
+  };
 }
 
 function renderToggle(unpinnedCount: number, expanded: boolean): string {

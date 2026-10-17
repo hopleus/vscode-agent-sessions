@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 export interface SessionPrefs {
   name?: string;
   pinned?: boolean;
+  chrome?: boolean;
 }
 
 export interface OpenSession {

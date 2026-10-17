@@ -21,6 +21,7 @@ const TAB_ICON_AGENTS: readonly string[] = ['claude', 'codex', 'opencode'];
 const DEFAULT_TAB_TITLE = 'New Session';
 const FALLBACK_SHELL = '/bin/bash';
 const READY_TIMEOUT_MS = 15000;
+const CLOSE_TIMEOUT_MS = 3000;
 
 export class TerminalManager implements vscode.Disposable {
   private readonly terminals = new Map<string, vscode.Terminal>();
@@ -77,6 +78,22 @@ export class TerminalManager implements vscode.Disposable {
     const terminal = this.terminals.get(id);
     terminal?.show();
     return !!terminal;
+  }
+
+  close(id: string): Promise<void> {
+    const terminal = this.terminals.get(id);
+    if (!terminal) { return Promise.resolve(); }
+    this.terminals.delete(id);
+    return new Promise(resolve => {
+      const timer = setTimeout(done, CLOSE_TIMEOUT_MS);
+      const subscription = vscode.window.onDidCloseTerminal(closed => { if (closed === terminal) { done(); } });
+      function done(): void {
+        clearTimeout(timer);
+        subscription.dispose();
+        resolve();
+      }
+      terminal.dispose();
+    });
   }
 
   openExisting(agentId: string, id: string, title: string | undefined, command: string, cwd: string): void {

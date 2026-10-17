@@ -7,7 +7,7 @@
     "color": "#1f2430",
     "theme": "dark"
   },
-  "version": "0.4.4",
+  "version": "0.5.0",
   "publisher": "hopleus",
   "license": "MIT",
   "repository": {
@@ -59,6 +59,31 @@
         "command": "agentSessions.refreshLimits",
         "title": "Refresh Usage Limits",
         "category": "Agent Sessions"
+      },
+      {
+        "command": "agentSessions.session.pin",
+        "title": "Pin",
+        "category": "Agent Sessions"
+      },
+      {
+        "command": "agentSessions.session.unpin",
+        "title": "Unpin",
+        "category": "Agent Sessions"
+      },
+      {
+        "command": "agentSessions.session.rename",
+        "title": "Rename...",
+        "category": "Agent Sessions"
+      },
+      {
+        "command": "agentSessions.session.reopenWithChrome",
+        "title": "Reopen with Chrome",
+        "category": "Agent Sessions"
+      },
+      {
+        "command": "agentSessions.session.reopenWithoutChrome",
+        "title": "Reopen without Chrome",
+        "category": "Agent Sessions"
       }
     ],
     "menus": {
@@ -67,6 +92,55 @@
           "command": "agentSessions.refresh",
           "when": "view == agentSessions.view",
           "group": "navigation"
+        }
+      ],
+      "webview/context": [
+        {
+          "command": "agentSessions.session.pin",
+          "when": "webviewId == 'agentSessions.view' && webviewSection == 'agentSessions.session' && !sessionPinned",
+          "group": "1_pin@1"
+        },
+        {
+          "command": "agentSessions.session.unpin",
+          "when": "webviewId == 'agentSessions.view' && webviewSection == 'agentSessions.session' && sessionPinned",
+          "group": "1_pin@1"
+        },
+        {
+          "command": "agentSessions.session.rename",
+          "when": "webviewId == 'agentSessions.view' && webviewSection == 'agentSessions.session'",
+          "group": "2_edit@1"
+        },
+        {
+          "command": "agentSessions.session.reopenWithChrome",
+          "when": "webviewId == 'agentSessions.view' && webviewSection == 'agentSessions.session' && sessionAgent == 'claude' && !sessionChrome",
+          "group": "3_reopen@1"
+        },
+        {
+          "command": "agentSessions.session.reopenWithoutChrome",
+          "when": "webviewId == 'agentSessions.view' && webviewSection == 'agentSessions.session' && sessionAgent == 'claude' && sessionChrome",
+          "group": "3_reopen@1"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "agentSessions.session.pin",
+          "when": "false"
+        },
+        {
+          "command": "agentSessions.session.unpin",
+          "when": "false"
+        },
+        {
+          "command": "agentSessions.session.rename",
+          "when": "false"
+        },
+        {
+          "command": "agentSessions.session.reopenWithChrome",
+          "when": "false"
+        },
+        {
+          "command": "agentSessions.session.reopenWithoutChrome",
+          "when": "false"
         }
       ]
     },

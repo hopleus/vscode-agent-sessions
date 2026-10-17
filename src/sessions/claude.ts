@@ -5,6 +5,18 @@ import * as path from 'path';
 import { FileInfo, FileStamp, JsonEntry, lastValue, readEdges, sameStamp, statFile, summarize } from './jsonl';
 import { NewSessionPlan, SessionRecord, SessionSource, WatchTarget } from './types';
 
+const CHROME_FLAG = /(^|\s)--(no-)?chrome(?=\s|$)/g;
+
+export function usesChrome(command: string): boolean {
+  return /(^|\s)--chrome(?=\s|$)/.test(command);
+}
+
+export function withChrome(command: string, chrome: boolean | undefined): string {
+  if (chrome === undefined) { return command; }
+  const base = command.replace(CHROME_FLAG, '').trim();
+  return `${base} ${chrome ? '--chrome' : '--no-chrome'}`;
+}
+
 interface CachedTitle extends FileStamp {
   title: string;
 }

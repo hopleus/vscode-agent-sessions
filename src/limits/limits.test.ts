@@ -99,7 +99,7 @@ describe('Claude usage', () => {
       five_hour: { utilization: 23.5, resets_at: '2026-10-10T18:00:00Z' },
       seven_day: { utilization: 41, resets_at: '2026-10-14T00:00:00Z' },
       seven_day_sonnet: null,
-      extra_usage: { is_enabled: true, utilization: 12.4 },
+      extra_usage: { is_enabled: true, monthly_limit: 5000, used_credits: 620, utilization: 12.4, currency: 'USD' },
     };
     const outcome = await fetchClaudeUsage(deps({ response: new Response(JSON.stringify(body)), seen }));
     assert.equal(outcome.result.kind, 'ok');
@@ -107,7 +107,8 @@ describe('Claude usage', () => {
     assert.deepEqual(outcome.result.limits.windows.map(w => [w.label, w.usedPercent]),
       [['5-hour', 23.5], ['7-day', 41]]);
     assert.equal(outcome.result.limits.windows[0].resetsAt, Date.parse('2026-10-10T18:00:00Z'));
-    assert.deepEqual(outcome.result.limits.details, ['Extra usage: 12% of the monthly limit', 'Plan: max']);
+    assert.deepEqual(outcome.result.limits.extraUsage, { usedPercent: 12.4, used: 620, limit: 5000, currency: 'USD' });
+    assert.deepEqual(outcome.result.limits.details, ['Plan: max']);
     const headers = seen.headers as Record<string, string>;
     assert.equal(headers.Authorization, `Bearer ${TOKEN}`);
     assert.equal(headers['User-Agent'], 'claude-code/2.1.131');
@@ -347,5 +348,47 @@ describe('shared Claude usage cache', () => {
     assert.equal(acquireUsageLock(dir), undefined);
     assert.ok(acquireUsageLock(dir, Date.now() + 60_000));
     first();
+  });
+});
+
+describe('Claude extra usage', () => {
+  const parse = async (extra: unknown) => {
+    const outcome = await fetchClaudeUsage({
+      readCredentials: async () => ({ accessToken: 'token' }),
+      fetch: (async () => new Response(JSON.stringify({ extra_usage: extra }))) as typeof fetch,
+      now: () => 0,
+    });
+    return outcome.result.kind === 'ok' ? outcome.result.limits.extraUsage : undefined;
+  };
+
+  it('is shown while enabled or when a monthly limit is set', async () => {
+    assert.equal(await parse(null), undefined);
+    assert.equal(await parse({ is_enabled: false, monthly_limit: null, used_credits: null, utilization: null }), undefined);
+    assert.deepEqual(await parse({ is_enabled: false, monthly_limit: 5000, used_credits: 5000, utilization: null }),
+      { usedPercent: 100, used: 5000, limit: 5000, currency: 'USD' });
+    assert.deepEqual(await parse({ is_enabled: true, monthly_limit: null, used_credits: 250, utilization: 0, currency: 'EUR' }),
+      { usedPercent: 0, used: 250, limit: undefined, currency: 'EUR' });
+  });
+
+  it('formats money from minor units', async () => {
+    const { formatMoney } = await import('./format');
+    assert.equal(formatMoney(1234, 'USD'), '$12.34');
+    assert.equal(formatMoney(500, 'JPY'), '¥500');
+    assert.equal(formatMoney(150, 'EUR'), '€1.50');
+  });
+
+  it('adds an extra usage bar with the spend to the tooltip', async () => {
+    const { tooltipMarkdown } = await import('./presentation');
+    const limits = {
+      agentId: 'claude', agentName: 'Claude', details: [],
+      windows: [{ label: '7-day', usedPercent: 100 }],
+      extraUsage: { usedPercent: 24.7, used: 1234, limit: 5000, currency: 'USD' },
+    };
+    const text = tooltipMarkdown({
+      agentId: 'claude', sessionTitle: undefined, result: { kind: 'ok', limits }, claudeEnabled: true,
+      thresholds: { warning: 80, error: 95 }, now: 0, refreshCommand: 'x',
+    });
+    assert.match(text, /Extra usage &nbsp;\|&nbsp; \*\*25%\*\*/);
+    assert.match(text, /_\$12\.34 of \$50\.00 spent_/);
   });
 });
