@@ -52,6 +52,14 @@ export class CodexSource implements SessionSource {
     };
   }
 
+  async delete(id: string, cwd: string): Promise<void> {
+    await this.rolloutsIn(cwd);
+    const file = [...this.cache].find(([, cached]) => cached.rollout?.id === id && cached.rollout.cwd === cwd)?.[0];
+    if (!file) { throw new Error('The Codex session file was not found.'); }
+    await fs.promises.rm(file);
+    this.cache.delete(file);
+  }
+
   private async findNewSession(cwd: string, since: number, taken: ReadonlySet<string>): Promise<string | undefined> {
     const rollouts = await this.rolloutsIn(cwd);
     return rollouts

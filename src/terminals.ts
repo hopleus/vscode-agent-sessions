@@ -10,14 +10,17 @@ interface PendingTerminal {
   find: SessionFinder;
 }
 
+type TerminalEnv = Record<string, string>;
+
 interface LaunchOptions {
   name: string;
   command: string;
   agentId: string;
   cwd: string;
+  env: TerminalEnv;
 }
 
-const TAB_ICON_AGENTS: readonly string[] = ['claude', 'codex', 'opencode'];
+const TAB_ICON_AGENTS: readonly string[] = ['claude', 'codex', 'opencode', 'kimi', 'glm', 'deepseek'];
 const DEFAULT_TAB_TITLE = 'New Session';
 const FALLBACK_SHELL = '/bin/bash';
 const READY_TIMEOUT_MS = 15000;
@@ -96,23 +99,23 @@ export class TerminalManager implements vscode.Disposable {
     });
   }
 
-  openExisting(agentId: string, id: string, title: string | undefined, command: string, cwd: string): void {
-    const terminal = this.launch({ name: title || DEFAULT_TAB_TITLE, command, agentId, cwd });
+  openExisting(agentId: string, id: string, title: string | undefined, command: string, cwd: string, env: TerminalEnv = {}): void {
+    const terminal = this.launch({ name: title || DEFAULT_TAB_TITLE, command, agentId, cwd, env });
     this.track(agentId, id, terminal);
   }
 
-  startAssigned(agentId: string, id: string, command: string, cwd: string): void {
-    const terminal = this.launch({ name: DEFAULT_TAB_TITLE, command, agentId, cwd });
+  startAssigned(agentId: string, id: string, command: string, cwd: string, env: TerminalEnv = {}): void {
+    const terminal = this.launch({ name: DEFAULT_TAB_TITLE, command, agentId, cwd, env });
     this.track(agentId, id, terminal);
   }
 
-  startDiscovered(agentId: string, command: string, find: SessionFinder, cwd: string): void {
-    const terminal = this.launch({ name: DEFAULT_TAB_TITLE, command, agentId, cwd });
+  startDiscovered(agentId: string, command: string, find: SessionFinder, cwd: string, env: TerminalEnv = {}): void {
+    const terminal = this.launch({ name: DEFAULT_TAB_TITLE, command, agentId, cwd, env });
     this.pending.push({ terminal, agentId, cwd, startedAt: Date.now(), find });
   }
 
-  startUntracked(name: string, agentId: string, command: string, cwd: string): void {
-    this.launch({ name, command, agentId, cwd });
+  startUntracked(name: string, agentId: string, command: string, cwd: string, env: TerminalEnv = {}): void {
+    this.launch({ name, command, agentId, cwd, env });
   }
 
   async bindDiscovered(): Promise<void> {
@@ -161,10 +164,11 @@ export class TerminalManager implements vscode.Disposable {
     this.changed.fire();
   }
 
-  private launch({ name, command, agentId, cwd }: LaunchOptions): vscode.Terminal {
+  private launch({ name, command, agentId, cwd, env }: LaunchOptions): vscode.Terminal {
     const terminal = vscode.window.createTerminal({
       name,
       cwd,
+      env,
       shellPath: process.env.SHELL || FALLBACK_SHELL,
       shellArgs: ['-l', '-i', '-c', command],
       location: { viewColumn: vscode.ViewColumn.Active },

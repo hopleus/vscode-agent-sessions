@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { ApiKeys } from './apiKeys';
 import { CONFIG_SECTION } from './constants';
 import { LimitsStatusBar } from './limitsStatusBar';
 import { SessionService } from './sessionService';
@@ -13,6 +14,7 @@ export class LimitsFeature implements vscode.Disposable {
     private readonly service: SessionService,
     private readonly state: vscode.Memento,
     private readonly storageDir: string,
+    private readonly keys: ApiKeys,
   ) {
     this.subscription = vscode.workspace.onDidChangeConfiguration(event => {
       if (event.affectsConfiguration(`${CONFIG_SECTION}.${ENABLED_SETTING}`)) { this.apply(); }
@@ -32,7 +34,7 @@ export class LimitsFeature implements vscode.Disposable {
   private apply(): void {
     const enabled = vscode.workspace.getConfiguration(CONFIG_SECTION).get<boolean>(ENABLED_SETTING, true);
     if (enabled && !this.bar) {
-      this.bar = new LimitsStatusBar(this.service, this.state, this.storageDir);
+      this.bar = new LimitsStatusBar(this.service, this.state, this.storageDir, this.keys);
       this.bar.start();
     } else if (!enabled) {
       this.stop();

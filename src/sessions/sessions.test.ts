@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import { ClaudeSource, usesChrome, withChrome } from './claude';
 import { CodexSource } from './codex';
+import { KimiSource, kimiWorkDirKey } from './kimi';
 import { lastValue, readEdges } from './jsonl';
 import { isSafeId } from './types';
 
@@ -85,6 +86,21 @@ describe('ClaudeSource', () => {
     assert.equal((await source.list(CWD))[0].title, 'Renamed');
   });
 
+  it('reads the model of the last answer', async () => {
+    write(ID_A, jsonl(userEntry('hi'), { type: 'assistant', message: { model: 'glm-5.3' } }, { type: 'assistant', message: { model: '<synthetic>' } }));
+    assert.equal((await source.list(CWD))[0].model, 'glm-5.3');
+  });
+
+  it('deletes the session file and its folder', async () => {
+    write(ID_A, jsonl(userEntry('first')));
+    fs.mkdirSync(path.join(projectDir, ID_A, 'subagents'), { recursive: true });
+    write(ID_B, jsonl(userEntry('second')));
+    await source.delete(ID_A, CWD);
+    assert.deepEqual((await source.list(CWD)).map(s => s.id), [ID_B]);
+    assert.equal(fs.existsSync(path.join(projectDir, ID_A)), false);
+    await assert.rejects(source.delete(ID_A, CWD));
+  });
+
   it('builds resume and new session commands', () => {
     assert.equal(source.resumeCommand('claude', ID_A), `claude --resume ${ID_A}`);
     const plan = source.newSession('claude');
@@ -151,6 +167,70 @@ describe('CodexSource', () => {
 
   it('builds the resume command', () => {
     assert.equal(source.resumeCommand('codex', ID_A), `codex resume ${ID_A}`);
+  });
+
+  it('deletes only the rollout of the session in this workspace', async () => {
+    writeRollout(ID_A, CWD, '2026-10-09T10:00:00Z', userMessage('mine'));
+    writeRollout(ID_B, '/other', '2026-10-09T10:00:00Z', userMessage('other'));
+    await assert.rejects(source.delete(ID_B, CWD));
+    await source.delete(ID_A, CWD);
+    assert.deepEqual(await source.list(CWD), []);
+    assert.equal((await source.list('/other')).length, 1);
+  });
+});
+
+describe('KimiSource', () => {
+  const KIMI_A = 'session_11111111-1111-4111-8111-111111111111';
+  const KIMI_B = 'session_22222222-2222-4222-8222-222222222222';
+  let source: KimiSource;
+
+  beforeEach(() => {
+    source = new KimiSource(() => root);
+  });
+
+  function writeSession(id: string, state: object, nested = false): string {
+    const dir = path.join(root, 'sessions', kimiWorkDirKey(CWD), id);
+    const stateDir = nested ? path.join(dir, 'session-meta') : dir;
+    fs.mkdirSync(stateDir, { recursive: true });
+    fs.writeFileSync(path.join(stateDir, 'state.json'), JSON.stringify(state));
+    return dir;
+  }
+
+  it('derives the work dir key like Kimi Code', () => {
+    assert.equal(kimiWorkDirKey('/Users/me/My Project/'), 'wd_my-project_1aad139b5205');
+    assert.match(kimiWorkDirKey('/'), /^wd_workspace_[0-9a-f]{12}$/);
+  });
+
+  it('lists titled sessions and skips archived and imported ones', async () => {
+    writeSession(KIMI_A, { title: 'Fix login', createdAt: 1000, updatedAt: '2026-10-09T10:00:00Z' });
+    writeSession(KIMI_B, { lastPrompt: 'why   is it\nslow', createdAt: 2000, updatedAt: 3000 }, true);
+    writeSession('session_33333333-3333-4333-8333-333333333333', { title: 'Old', archived: true });
+    writeSession('session_44444444-4444-4444-8444-444444444444', { title: 'Imported', custom: { imported_from_kimi_cli: true } });
+    writeSession('session_55555555-5555-4555-8555-555555555555', { createdAt: 4000 });
+    const sessions = await source.list(CWD);
+    assert.deepEqual(sessions.map(s => [s.id, s.title, s.updatedAt]), [
+      [KIMI_A, 'Fix login', Date.parse('2026-10-09T10:00:00Z')],
+      [KIMI_B, 'why is it slow', 3000],
+    ]);
+    assert.deepEqual(await source.list('/other'), []);
+  });
+
+  it('finds a new session even before it has a title', async () => {
+    writeSession(KIMI_A, { title: 'Old', createdAt: 1000 });
+    writeSession(KIMI_B, { createdAt: 50_000 });
+    const plan = source.newSession('kimi');
+    assert.equal(plan.kind, 'discovered');
+    if (plan.kind !== 'discovered') { return; }
+    assert.equal(await plan.find(CWD, 40_000, new Set()), KIMI_B);
+    assert.equal(await plan.find(CWD, 40_000, new Set([KIMI_B])), undefined);
+  });
+
+  it('builds the resume command and deletes the session folder', async () => {
+    assert.equal(source.resumeCommand('kimi', KIMI_A), `kimi --session ${KIMI_A}`);
+    const dir = writeSession(KIMI_A, { title: 'Fix login' });
+    await source.delete(KIMI_A, CWD);
+    assert.equal(fs.existsSync(dir), false);
+    await assert.rejects(source.delete(KIMI_A, CWD));
   });
 });
 

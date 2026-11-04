@@ -1,13 +1,13 @@
 {
   "name": "hopl-agent-sessions",
   "displayName": "HOPL Agent Sessions",
-  "description": "All your Claude Code, Codex and OpenCode sessions in one panel. Resume any conversation with one click.",
+  "description": "All your Claude Code, Codex, OpenCode and Kimi sessions in one panel, plus Claude Code on GLM and DeepSeek. Resume any conversation with one click.",
   "icon": "media/icon.png",
   "galleryBanner": {
     "color": "#1f2430",
     "theme": "dark"
   },
-  "version": "0.5.0",
+  "version": "0.6.0",
   "publisher": "hopleus",
   "license": "MIT",
   "repository": {
@@ -84,6 +84,21 @@
         "command": "agentSessions.session.reopenWithoutChrome",
         "title": "Reopen without Chrome",
         "category": "Agent Sessions"
+      },
+      {
+        "command": "agentSessions.session.delete",
+        "title": "Delete...",
+        "category": "Agent Sessions"
+      },
+      {
+        "command": "agentSessions.setApiKey.glm",
+        "title": "Set Z.ai API Key (GLM)",
+        "category": "Agent Sessions"
+      },
+      {
+        "command": "agentSessions.setApiKey.deepseek",
+        "title": "Set DeepSeek API Key",
+        "category": "Agent Sessions"
       }
     ],
     "menus": {
@@ -119,6 +134,11 @@
           "command": "agentSessions.session.reopenWithoutChrome",
           "when": "webviewId == 'agentSessions.view' && webviewSection == 'agentSessions.session' && sessionAgent == 'claude' && sessionChrome",
           "group": "3_reopen@1"
+        },
+        {
+          "command": "agentSessions.session.delete",
+          "when": "webviewId == 'agentSessions.view' && webviewSection == 'agentSessions.session'",
+          "group": "9_delete@1"
         }
       ],
       "commandPalette": [
@@ -141,6 +161,10 @@
         {
           "command": "agentSessions.session.reopenWithoutChrome",
           "when": "false"
+        },
+        {
+          "command": "agentSessions.session.delete",
+          "when": "false"
         }
       ]
     },
@@ -150,7 +174,7 @@
         "agentSessions.agents": {
           "type": "array",
           "default": [],
-          "description": "Agent overrides: id, name, command, enabled. Merged with the built-in Claude, Codex and OpenCode.",
+          "description": "Agent overrides: id, name, command, enabled. Merged with the built-in Claude, Codex, OpenCode, Kimi, GLM (Claude Code) and DeepSeek (Claude Code).",
           "scope": "application"
         },
         "agentSessions.claudeProjectsPath": {
@@ -245,6 +269,10 @@
     "agent",
     "sessions",
     "chat history",
-    "resume"
+    "resume",
+    "opencode",
+    "kimi",
+    "glm",
+    "deepseek"
   ]
 }

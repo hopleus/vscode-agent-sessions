@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -14,6 +15,8 @@ interface SessionRow {
 
 const NEW_SESSION_CLOCK_SKEW_MS = 2000;
 const POLL_INTERVAL_MS = 3000;
+const DELETE_TIMEOUT_MS = 30_000;
+const FALLBACK_SHELL = '/bin/bash';
 
 const LIST_SESSIONS_SQL = `
   SELECT s.id, s.title, s.time_created, s.time_updated
@@ -67,6 +70,15 @@ export class OpenCodeSource implements SessionSource {
     };
   }
 
+  delete(id: string, _cwd: string, command: string): Promise<void> {
+    const shell = process.env.SHELL || FALLBACK_SHELL;
+    return new Promise((resolve, reject) => {
+      execFile(shell, ['-l', '-i', '-c', `${command} session delete ${id}`], { timeout: DELETE_TIMEOUT_MS }, (error, _stdout, stderr) => {
+        if (error) { reject(new Error(lastLine(stderr) || error.message)); } else { resolve(); }
+      });
+    });
+  }
+
   private findNewSession(cwd: string, since: number, taken: ReadonlySet<string>): string | undefined {
     return this.query(cwd)
       .filter(row => row.time_created >= since - NEW_SESSION_CLOCK_SKEW_MS && !taken.has(row.id))
@@ -88,4 +100,11 @@ export class OpenCodeSource implements SessionSource {
       db?.close();
     }
   }
+}
+
+const ANSI_COLOR = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g');
+
+function lastLine(output: string): string {
+  const lines = output.replace(ANSI_COLOR, '').split('\n').map(line => line.trim()).filter(Boolean);
+  return lines[lines.length - 1] ?? '';
 }

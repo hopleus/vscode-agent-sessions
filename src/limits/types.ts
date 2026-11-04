@@ -11,11 +11,20 @@ export interface ExtraUsage {
   currency: string;
 }
 
+export interface Balance {
+  currency: string;
+  total: number;
+  granted: number;
+  toppedUp: number;
+}
+
 export interface AgentLimits {
   agentId: string;
   agentName: string;
   windows: LimitWindow[];
   extraUsage?: ExtraUsage;
+  balances?: Balance[];
+  available?: boolean;
   details: string[];
   observedAt?: number;
 }
@@ -31,4 +40,10 @@ export interface TokenUsage {
   cacheRead: number;
   cacheWrite: number;
   cost: number;
+}
+
+export interface UsageOutcome {
+  result: LimitsResult;
+  retryAfterMs?: number;
+  transient?: boolean;
 }

@@ -1,7 +1,10 @@
 import { SessionRecord, SessionSource, WatchTarget } from './types';
 
 export class SessionCatalog {
-  constructor(private readonly sources: readonly SessionSource[]) {}
+  constructor(
+    private readonly sources: readonly SessionSource[],
+    private readonly aliases: Readonly<Record<string, string>> = {},
+  ) {}
 
   async list(roots: readonly string[]): Promise<SessionRecord[]> {
     const perRoot = await Promise.all(roots.flatMap(root => this.sources.map(source => source.list(root))));
@@ -9,7 +12,8 @@ export class SessionCatalog {
   }
 
   sourceFor(agentId: string): SessionSource | undefined {
-    return this.sources.find(source => source.agentId === agentId);
+    const sourceId = this.aliases[agentId] ?? agentId;
+    return this.sources.find(source => source.agentId === sourceId);
   }
 
   pollIntervalMs(): number | undefined {

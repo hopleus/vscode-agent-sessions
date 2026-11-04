@@ -1,26 +1,30 @@
 import * as vscode from 'vscode';
 import { CONFIG_SECTION } from './constants';
+import { PROVIDERS, ProviderId } from './providers';
 
 export interface Agent {
   id: string;
   name: string;
   command: string;
   enabled: boolean;
+  provider?: ProviderId;
 }
 
 const BUILT_IN_AGENTS: readonly Agent[] = [
   { id: 'claude', name: 'Claude', command: 'claude', enabled: true },
   { id: 'codex', name: 'Codex', command: 'codex', enabled: true },
   { id: 'opencode', name: 'OpenCode', command: 'opencode', enabled: true },
+  { id: 'kimi', name: 'Kimi', command: 'kimi', enabled: true },
+  ...PROVIDERS.map(provider => ({ id: provider.id, name: provider.name, command: 'claude', enabled: true, provider: provider.id })),
 ];
 
 export function allAgents(): Agent[] {
   const overrides = userOverrides();
-  const builtIn = BUILT_IN_AGENTS.map(agent => ({ ...agent, ...overrides.find(o => o.id === agent.id) }));
+  const builtIn = BUILT_IN_AGENTS.map(agent => ({ ...agent, ...overrides.find(o => o.id === agent.id), provider: agent.provider }));
   const custom = overrides
     .filter(isCompleteAgent)
     .filter(o => !BUILT_IN_AGENTS.some(agent => agent.id === o.id))
-    .map(o => ({ ...o, enabled: o.enabled ?? true }));
+    .map(o => ({ ...o, enabled: o.enabled ?? true, provider: undefined }));
   return [...builtIn, ...custom];
 }
 

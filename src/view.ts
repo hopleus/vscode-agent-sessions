@@ -49,6 +49,7 @@ export class SessionsView implements vscode.WebviewViewProvider, vscode.Disposab
       on(SESSION_COMMANDS.rename, session => this.promptRename(session.sessionId, session.sessionTitle)),
       on(SESSION_COMMANDS.reopenWithChrome, session => this.service.reopenWithChrome(session.sessionId, true)),
       on(SESSION_COMMANDS.reopenWithoutChrome, session => this.service.reopenWithChrome(session.sessionId, false)),
+      on(SESSION_COMMANDS.delete, session => this.confirmDelete(session)),
     ];
   }
 
@@ -83,8 +84,22 @@ export class SessionsView implements vscode.WebviewViewProvider, vscode.Disposab
         await this.service.open(message.id, message.agentId);
         break;
       case 'new':
-        this.service.startNew(message.agentId);
+        await this.service.startNew(message.agentId);
         break;
+    }
+  }
+
+  private async confirmDelete(session: SessionContext): Promise<void> {
+    const choice = await vscode.window.showWarningMessage(
+      `Delete "${session.sessionTitle}"?`,
+      { modal: true, detail: 'The session is deleted from the agent\'s history on this computer and cannot be restored.' },
+      'Delete',
+    );
+    if (choice !== 'Delete') { return; }
+    try {
+      await this.service.deleteSession(session.sessionId);
+    } catch (error) {
+      void vscode.window.showErrorMessage(`Could not delete the session: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 

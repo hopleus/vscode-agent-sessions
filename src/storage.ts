@@ -1,9 +1,11 @@
 import * as vscode from 'vscode';
+import { ProviderId } from './providers';
 
 export interface SessionPrefs {
   name?: string;
   pinned?: boolean;
   chrome?: boolean;
+  provider?: ProviderId;
 }
 
 export interface OpenSession {
@@ -24,6 +26,12 @@ export class PrefsStore {
 
   async update(id: string, patch: SessionPrefs): Promise<void> {
     await this.state.update(PREFS_KEY, { ...this.all(), [id]: { ...this.get(id), ...patch } });
+  }
+
+  async remove(id: string): Promise<void> {
+    const prefs = { ...this.all() };
+    delete prefs[id];
+    await this.state.update(PREFS_KEY, prefs);
   }
 
   private all(): Record<string, SessionPrefs> {

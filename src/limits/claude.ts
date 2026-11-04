@@ -2,7 +2,7 @@ import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { AgentLimits, ExtraUsage, LimitsResult, LimitWindow } from './types';
+import { AgentLimits, ExtraUsage, LimitWindow, UsageOutcome } from './types';
 
 const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage';
 const USER_AGENT = 'claude-code/2.1.131';
@@ -22,11 +22,7 @@ export interface UsageDeps {
   now(): number;
 }
 
-export interface ClaudeUsageOutcome {
-  result: LimitsResult;
-  retryAfterMs?: number;
-  transient?: boolean;
-}
+export type ClaudeUsageOutcome = UsageOutcome;
 
 export function parseCredentials(raw: string): Credentials | undefined {
   try {

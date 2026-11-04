@@ -2,6 +2,10 @@ import claudeColor from '../../node_modules/@lobehub/icons-static-svg/icons/clau
 import claudeMono from '../../node_modules/@lobehub/icons-static-svg/icons/claude.svg';
 import openCodeMono from '../../node_modules/@lobehub/icons-static-svg/icons/opencode.svg';
 import openAiMono from '../../node_modules/@lobehub/icons-static-svg/icons/openai.svg';
+import deepSeekColor from '../../node_modules/@lobehub/icons-static-svg/icons/deepseek-color.svg';
+import deepSeekMono from '../../node_modules/@lobehub/icons-static-svg/icons/deepseek.svg';
+import kimiMono from '../../node_modules/@lobehub/icons-static-svg/icons/kimi.svg';
+import zaiMono from '../../node_modules/@lobehub/icons-static-svg/icons/zai.svg';
 
 const FALLBACK_ICON = '<span class="codicon codicon-hubot"></span>';
 
@@ -9,12 +13,18 @@ const COLOR_ICONS: Record<string, string> = {
   claude: clean(claudeColor),
   codex: clean(openAiMono),
   opencode: clean(openCodeMono),
+  kimi: clean(kimiMono),
+  glm: clean(zaiMono),
+  deepseek: clean(deepSeekColor),
 };
 
 const MONO_ICONS: Record<string, string> = {
   claude: clean(claudeMono),
   codex: clean(openAiMono),
   opencode: clean(openCodeMono),
+  kimi: clean(kimiMono),
+  glm: clean(zaiMono),
+  deepseek: clean(deepSeekMono),
 };
 
 export function agentIcon(agentId: string | undefined, mono = false): string {

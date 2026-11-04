@@ -1,12 +1,15 @@
 import * as vscode from 'vscode';
-import { allAgents, enabledAgents } from './agents';
+import { Agent, allAgents, enabledAgents } from './agents';
+import { ApiKeys } from './apiKeys';
 import { ensureSupportedPlatform, isSupportedPlatform } from './platform';
 import { CONFIG_SECTION } from './constants';
 import { SessionDto, StateMessage } from './protocol';
 import { SessionCatalog } from './sessions/catalog';
 import { ClaudeSource, usesChrome, withChrome } from './sessions/claude';
 import { CodexSource } from './sessions/codex';
+import { KimiSource } from './sessions/kimi';
 import { OpenCodeSource } from './sessions/opencode';
+import { providerById, providerOfModel, PROVIDERS } from './providers';
 import { isSafeId, SessionRecord } from './sessions/types';
 import { DebouncedWatcher } from './sessions/watcher';
 import { OpenSessionsStore, PrefsStore } from './storage';
@@ -39,12 +42,13 @@ export class SessionService implements vscode.Disposable {
   private pollTimer: NodeJS.Timeout | undefined;
   private lastActiveId: string | undefined;
 
-  constructor(context: vscode.ExtensionContext) {
+  constructor(context: vscode.ExtensionContext, private readonly keys: ApiKeys) {
     this.catalog = new SessionCatalog([
       new ClaudeSource(() => vscode.workspace.getConfiguration(CONFIG_SECTION).get<string>('claudeProjectsPath', '')),
       new CodexSource(),
       new OpenCodeSource(),
-    ]);
+      new KimiSource(),
+    ], Object.fromEntries(PROVIDERS.map(provider => [provider.id, CLAUDE_AGENT_ID])));
     this.prefs = new PrefsStore(context.workspaceState);
     this.openSessions = new OpenSessionsStore(context.workspaceState);
     this.terminals = new TerminalManager(context.extensionUri, this.openSessions);
@@ -85,7 +89,7 @@ export class SessionService implements vscode.Disposable {
   async state(): Promise<StateMessage> {
     const roots = workspaceRoots();
     await this.terminals.bindDiscovered();
-    const records = await this.catalog.list(roots);
+    const records = await this.records();
     void this.renameActiveTab(records);
     return {
       type: 'state',
@@ -98,7 +102,7 @@ export class SessionService implements vscode.Disposable {
   async currentSession(): Promise<CurrentSession | undefined> {
     const id = this.terminals.activeSessionId() ?? this.lastActiveId;
     if (!id) { return undefined; }
-    const record = (await this.catalog.list(workspaceRoots())).find(candidate => candidate.id === id);
+    const record = (await this.records()).find(candidate => candidate.id === id);
     const agentId = record?.agentId ?? this.openSessions.list().find(session => session.id === id)?.agentId;
     const title = this.prefs.get(id).name || record?.title;
     return agentId && title ? { id, agentId, title } : undefined;
@@ -116,10 +120,10 @@ export class SessionService implements vscode.Disposable {
     const stored = this.openSessions.list();
     if (stored.length === 0 || !isSupportedPlatform()) { return; }
     await this.terminals.waitUntilReady();
-    const records = await this.catalog.list(workspaceRoots());
+    const records = await this.records();
     const running = this.terminals.adoptRunning(stored);
     for (const { agentId, id } of stored.filter(session => !running.has(session.id))) {
-      this.openWith(id, agentId, records);
+      await this.openWith(id, agentId, records, false);
       await delay(RESTORE_STAGGER_MS);
     }
   }
@@ -128,25 +132,43 @@ export class SessionService implements vscode.Disposable {
     if (this.terminals.show(id) || this.opening.has(id) || !ensureSupportedPlatform()) { return; }
     this.opening.add(id);
     try {
-      this.openWith(id, agentId, await this.catalog.list(workspaceRoots()));
+      await this.openWith(id, agentId, await this.records());
     } finally {
       this.opening.delete(id);
     }
   }
 
-  startNew(agentId?: string): void {
+  async startNew(agentId?: string): Promise<void> {
     if (!ensureSupportedPlatform()) { return; }
     const cwd = this.usableRoot();
     const agents = enabledAgents();
     const agent = agents.find(a => a.id === agentId) ?? agents[0];
     if (!cwd || !agent) { return; }
+    const env = await this.envFor(agent);
+    if (!env) { return; }
     const plan = this.catalog.sourceFor(agent.id)?.newSession(agent.command);
     if (!plan) {
-      this.terminals.startUntracked(agent.name, agent.id, agent.command, cwd);
+      this.terminals.startUntracked(agent.name, agent.id, agent.command, cwd, env);
     } else if (plan.kind === 'assigned') {
-      this.terminals.startAssigned(agent.id, plan.id, plan.command, cwd);
+      if (agent.provider) { await this.prefs.update(plan.id, { provider: agent.provider }); }
+      this.terminals.startAssigned(agent.id, plan.id, plan.command, cwd, env);
     } else {
-      this.terminals.startDiscovered(agent.id, plan.command, plan.find, cwd);
+      this.terminals.startDiscovered(agent.id, plan.command, plan.find, cwd, env);
+    }
+  }
+
+  async deleteSession(id: string): Promise<void> {
+    const record = (await this.records()).find(candidate => candidate.id === id);
+    const source = record && this.catalog.sourceFor(record.agentId);
+    const command = record && this.agentCommand(record.agentId);
+    if (!record || !source || !command || !isSafeId(id)) { throw new Error('The session was not found.'); }
+    await this.terminals.close(id);
+    this.openSessions.remove(id);
+    try {
+      await source.delete(id, record.cwd, command);
+      await this.prefs.remove(id);
+    } finally {
+      this.changed.fire();
     }
   }
 
@@ -170,7 +192,7 @@ export class SessionService implements vscode.Disposable {
     this.opening.add(id);
     try {
       await this.terminals.close(id);
-      this.openWith(id, CLAUDE_AGENT_ID, await this.catalog.list(workspaceRoots()));
+      await this.openWith(id, CLAUDE_AGENT_ID, await this.records());
     } finally {
       this.opening.delete(id);
     }
@@ -197,15 +219,33 @@ export class SessionService implements vscode.Disposable {
     return allAgents().find(agent => agent.id === agentId)?.command;
   }
 
-  private openWith(id: string, agentId: string, records: SessionRecord[]): void {
+  private async openWith(id: string, agentId: string, records: SessionRecord[], askForKey = true): Promise<void> {
     const record = records.find(candidate => candidate.id === id);
     const cwd = record?.cwd ?? this.usableRoot();
     const source = this.catalog.sourceFor(agentId);
-    const base = this.agentCommand(agentId);
-    const command = base && agentId === CLAUDE_AGENT_ID ? withChrome(base, this.prefs.get(id).chrome) : base;
-    if (!cwd || !vscode.workspace.isTrusted || !source || !command || !isSafeId(id) || this.terminals.show(id)) { return; }
+    const agent = allAgents().find(candidate => candidate.id === agentId);
+    const command = agent && agentId === CLAUDE_AGENT_ID ? withChrome(agent.command, this.prefs.get(id).chrome) : agent?.command;
+    if (!agent || !cwd || !vscode.workspace.isTrusted || !source || !command || !isSafeId(id) || this.terminals.show(id)) { return; }
+    const env = await this.envFor(agent, askForKey);
+    if (!env || this.terminals.show(id)) { return; }
     const title = this.prefs.get(id).name || record?.title;
-    this.terminals.openExisting(agentId, id, title, source.resumeCommand(command, id), cwd);
+    this.terminals.openExisting(agentId, id, title, source.resumeCommand(command, id), cwd, env);
+  }
+
+  private async envFor(agent: Agent, askForKey = true): Promise<Record<string, string> | undefined> {
+    const provider = providerById(agent.provider);
+    if (!provider) { return {}; }
+    const key = askForKey ? await this.keys.ensure(provider) : await this.keys.get(provider.id);
+    return key ? provider.env(key) : undefined;
+  }
+
+  private async records(): Promise<SessionRecord[]> {
+    const records = await this.catalog.list(workspaceRoots());
+    return records.map(record => {
+      if (record.agentId !== CLAUDE_AGENT_ID) { return record; }
+      const provider = this.prefs.get(record.id).provider ?? providerOfModel(record.model);
+      return provider ? { ...record, agentId: provider } : record;
+    });
   }
 
   private usableRoot(): string | undefined {
@@ -215,7 +255,7 @@ export class SessionService implements vscode.Disposable {
   private async renameActiveTab(known?: SessionRecord[]): Promise<void> {
     const id = this.terminals.activeSessionId();
     if (!id) { return; }
-    const records = known ?? await this.catalog.list(workspaceRoots());
+    const records = known ?? await this.records();
     const title = this.prefs.get(id).name || records.find(record => record.id === id)?.title;
     if (title) { this.terminals.renameActive(title); }
   }

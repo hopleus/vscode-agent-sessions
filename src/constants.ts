@@ -9,4 +9,10 @@ export const SESSION_COMMANDS = {
   rename: 'agentSessions.session.rename',
   reopenWithChrome: 'agentSessions.session.reopenWithChrome',
   reopenWithoutChrome: 'agentSessions.session.reopenWithoutChrome',
+  delete: 'agentSessions.session.delete',
+} as const;
+
+export const SET_API_KEY_COMMANDS = {
+  glm: 'agentSessions.setApiKey.glm',
+  deepseek: 'agentSessions.setApiKey.deepseek',
 } as const;

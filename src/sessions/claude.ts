@@ -17,13 +17,16 @@ export function withChrome(command: string, chrome: boolean | undefined): string
   return `${base} ${chrome ? '--chrome' : '--no-chrome'}`;
 }
 
-interface CachedTitle extends FileStamp {
+interface Summary {
   title: string;
+  model?: string;
 }
+
+interface CachedSummary extends FileStamp, Summary {}
 
 export class ClaudeSource implements SessionSource {
   readonly agentId = 'claude';
-  private readonly titles = new Map<string, CachedTitle>();
+  private readonly summaries = new Map<string, CachedSummary>();
 
   constructor(private readonly customRoot: () => string) {}
 
@@ -47,6 +50,14 @@ export class ClaudeSource implements SessionSource {
     return { kind: 'assigned', id, command: `${command} --session-id ${id}` };
   }
 
+  async delete(id: string, cwd: string): Promise<void> {
+    const dir = this.projectDir(cwd);
+    const file = path.join(dir, `${id}.jsonl`);
+    await fs.promises.rm(file);
+    await fs.promises.rm(path.join(dir, id), { recursive: true, force: true });
+    this.summaries.delete(file);
+  }
+
   private projectDir(cwd: string): string {
     const root = this.customRoot() || path.join(os.homedir(), '.claude', 'projects');
     return path.join(root, cwd.replace(/[^a-zA-Z0-9]/g, '-'));
@@ -64,26 +75,30 @@ export class ClaudeSource implements SessionSource {
   private async toRecord(cwd: string, file: string): Promise<SessionRecord[]> {
     try {
       const stamp = await statFile(file);
-      const title = await this.titleOf(file, stamp);
+      const { title, model } = await this.summaryOf(file, stamp);
       if (!title) { return []; }
-      return [{ id: path.basename(file, '.jsonl'), cwd, agentId: this.agentId, title, updatedAt: stamp.mtime }];
+      return [{ id: path.basename(file, '.jsonl'), cwd, agentId: this.agentId, title, updatedAt: stamp.mtime, model }];
     } catch {
       return [];
     }
   }
 
-  private async titleOf(file: string, stamp: FileInfo): Promise<string> {
-    const cached = this.titles.get(file);
-    if (cached && sameStamp(cached, stamp)) { return cached.title; }
-    const title = await readTitle(file, stamp.size);
-    this.titles.set(file, { mtime: stamp.mtime, size: stamp.size, title });
-    return title;
+  private async summaryOf(file: string, stamp: FileInfo): Promise<Summary> {
+    const cached = this.summaries.get(file);
+    if (cached && sameStamp(cached, stamp)) { return cached; }
+    const summary = await readSummary(file, stamp.size);
+    this.summaries.set(file, { mtime: stamp.mtime, size: stamp.size, ...summary });
+    return summary;
   }
 }
 
-async function readTitle(file: string, size: number): Promise<string> {
+async function readSummary(file: string, size: number): Promise<Summary> {
   const { head, tail } = await readEdges(file, size);
-  if (head.some(entry => entry.isSidechain === true)) { return ''; }
+  if (head.some(entry => entry.isSidechain === true)) { return { title: '' }; }
+  return { title: titleOf(head, tail), model: lastModel(tail) ?? lastModel(head) };
+}
+
+function titleOf(head: readonly JsonEntry[], tail: readonly JsonEntry[]): string {
   return lastValue(tail, 'custom-title', 'customTitle')
     ?? lastValue(head, 'custom-title', 'customTitle')
     ?? lastValue(tail, 'ai-title', 'aiTitle')
@@ -91,6 +106,14 @@ async function readTitle(file: string, size: number): Promise<string> {
     ?? summarizeOptional(lastValue(tail, 'last-prompt', 'lastPrompt'))
     ?? lastValue(tail, 'summary', 'summary')
     ?? firstPrompt(head);
+}
+
+function lastModel(entries: readonly JsonEntry[]): string | undefined {
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const model = entries[i].type === 'assistant' ? entries[i].message?.model : undefined;
+    if (typeof model === 'string' && model && model !== '<synthetic>') { return model; }
+  }
+  return undefined;
 }
 
 function summarizeOptional(text: string | undefined): string | undefined {

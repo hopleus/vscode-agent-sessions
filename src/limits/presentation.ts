@@ -1,6 +1,6 @@
-import { CLAUDE_AGENT_ID, CLAUDE_USAGE_PAGE, CODEX_AGENT_ID, limitsAgentName, OPENCODE_AGENT_ID } from './agents';
-import { formatAge, formatMoney, formatRemaining, formatRemainingShort, formatTokens, progressBarImage, severityOf, Thresholds } from './format';
-import { AgentLimits, ExtraUsage, LimitsResult, LimitWindow, TokenUsage } from './types';
+import { CLAUDE_AGENT_ID, CLAUDE_USAGE_PAGE, CODEX_AGENT_ID, DEEPSEEK_AGENT_ID, DEEPSEEK_PLATFORM_PAGE, limitsAgentName, OPENCODE_AGENT_ID } from './agents';
+import { formatAge, formatAmount, formatMoney, formatRemaining, formatRemainingShort, formatTokens, progressBarImage, severityOf, Thresholds } from './format';
+import { AgentLimits, Balance, ExtraUsage, LimitsResult, LimitWindow, TokenUsage } from './types';
 
 export const ENABLE_CLAUDE_LINK =
   'command:workbench.action.openSettings?%5B%22agentSessions.limits.claude.enabled%22%5D';
@@ -11,6 +11,7 @@ export interface LimitsView {
   result: LimitsResult | undefined;
   tokens?: TokenUsage;
   claudeEnabled: boolean;
+  setKeyCommand?: string;
   thresholds: Thresholds;
   now: number;
   refreshCommand: string;
@@ -35,6 +36,8 @@ export function statusWindow(result: LimitsResult | undefined, mode: StatusWindo
 
 export function statusText(result: LimitsResult | undefined, now: number, tokens?: TokenUsage, mode: StatusWindowMode = 'first'): string {
   if (tokens) { return `${formatTokens(totalTokens(tokens))} tokens`; }
+  const balance = limitsOf(result)?.balances?.[0];
+  if (balance) { return formatAmount(balance.total, balance.currency); }
   const primary = statusWindow(result, mode);
   if (!primary) { return '–%'; }
   const percent = `${Math.round(primary.usedPercent)}%`;
@@ -43,13 +46,15 @@ export function statusText(result: LimitsResult | undefined, now: number, tokens
 }
 
 export function statusSeverity(result: LimitsResult | undefined, thresholds: Thresholds, mode: StatusWindowMode = 'first'): 'ok' | 'warning' | 'error' {
+  if (limitsOf(result)?.available === false) { return 'error'; }
   const primary = statusWindow(result, mode);
   return severityOf(primary?.usedPercent ?? 0, thresholds);
 }
 
 export function tooltipMarkdown(view: LimitsView): string {
   const name = limitsAgentName(view.agentId);
-  const lines: string[] = [`**${name ?? 'Agent'} Usage**`];
+  const kind = limitsOf(view.result)?.balances ? 'Balance' : 'Usage';
+  const lines: string[] = [`**${name ?? 'Agent'} ${kind}**`];
   if (view.sessionTitle) { lines.push(`_${escapeMarkdown(view.sessionTitle)}_`); }
   lines.push(...bodyLines(view, name));
   lines.push(footer(view));
@@ -73,6 +78,7 @@ function bodyLines(view: LimitsView, name: string | undefined): string[] {
     return view.tokens ? tokenLines(view.tokens) : ['No token data for this session yet.'];
   }
   if (!name) { return ['This agent has no usage limits to show.']; }
+  if (view.setKeyCommand) { return [`No API key yet. [Set API key](command:${view.setKeyCommand})`]; }
   if (view.agentId === CLAUDE_AGENT_ID && !view.claudeEnabled) {
     return [`Off. [Enable in settings](${ENABLE_CLAUDE_LINK}) (reads your Claude Code login to ask Anthropic for usage).`];
   }
@@ -90,8 +96,17 @@ function limitLines(limits: AgentLimits, view: LimitsView): string[] {
     lines.push(`_${formatRemaining(window.resetsAt, view.now)}_`);
   }
   if (limits.extraUsage) { lines.push(...extraUsageLines(limits.extraUsage, view)); }
+  limits.balances?.forEach(balance => lines.push(...balanceLines(balance)));
+  if (limits.available === false) { lines.push('The balance is not enough for API calls.'); }
   limits.details.forEach(detail => lines.push(escapeMarkdown(detail)));
   return lines;
+}
+
+function balanceLines(balance: Balance): string[] {
+  return [
+    `Balance &nbsp;|&nbsp; **${formatAmount(balance.total, balance.currency)}**`,
+    `_Topped up ${formatAmount(balance.toppedUp, balance.currency)} · granted ${formatAmount(balance.granted, balance.currency)}_`,
+  ];
 }
 
 function extraUsageLines(extra: ExtraUsage, view: LimitsView): string[] {
@@ -110,6 +125,7 @@ function extraUsageLines(extra: ExtraUsage, view: LimitsView): string[] {
 function footer(view: LimitsView): string {
   const parts: string[] = [];
   if (view.agentId === CLAUDE_AGENT_ID) { parts.push(`[View on claude.ai](${CLAUDE_USAGE_PAGE})`); }
+  if (view.agentId === DEEPSEEK_AGENT_ID) { parts.push(`[View on DeepSeek Platform](${DEEPSEEK_PLATFORM_PAGE})`); }
   const observed = view.agentId === CODEX_AGENT_ID ? limitsOf(view.result)?.observedAt : undefined;
   parts.push(observed !== undefined
     ? `Last seen ${formatAge(observed, view.now)}`

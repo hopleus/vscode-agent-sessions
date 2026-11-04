@@ -124,3 +124,36 @@ describe('OpenCodeSource', { skip: !sqlite && 'node:sqlite is not available' }, 
     assert.equal(source.resumeCommand('opencode', 'ses_1'), 'opencode --session ses_1');
   });
 });
+
+describe('OpenCodeSource delete', () => {
+  let dir: string;
+  let previousShell: string | undefined;
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'opencode-delete-'));
+    previousShell = process.env.SHELL;
+    process.env.SHELL = '/bin/sh';
+  });
+
+  afterEach(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+    if (previousShell === undefined) { delete process.env.SHELL; } else { process.env.SHELL = previousShell; }
+  });
+
+  function fakeCli(script: string): string {
+    const file = path.join(dir, 'opencode');
+    fs.writeFileSync(file, `#!/bin/sh\n${script}\n`, { mode: 0o755 });
+    return file;
+  }
+
+  it('runs the session delete command of OpenCode', async () => {
+    const log = path.join(dir, 'args');
+    await new OpenCodeSource().delete('ses_abc', '/work', fakeCli(`echo "$@" > ${log}`));
+    assert.equal(fs.readFileSync(log, 'utf8').trim(), 'session delete ses_abc');
+  });
+
+  it('reports the last error line without colors', async () => {
+    const cli = fakeCli(`printf '\\033[91mError: \\033[0mSession not found: ses_x\\n' >&2; exit 1`);
+    await assert.rejects(new OpenCodeSource().delete('ses_x', '/work', cli), { message: 'Error: Session not found: ses_x' });
+  });
+});

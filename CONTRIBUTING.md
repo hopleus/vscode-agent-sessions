@@ -25,12 +25,14 @@ While developing:
 - `src/storage.ts` – pins, custom names and open sessions in workspace state
 - `src/agents.ts` – built-in agents and user overrides
 - `src/protocol.ts` – messages exchanged with the webview, with runtime validation
-- `src/sessions` – session sources (`claude.ts`, `codex.ts`), catalog, file watcher, JSONL helpers, tests
+- `src/sessions` – session sources (`claude.ts`, `codex.ts`, `opencode.ts`, `kimi.ts`), catalog, file watcher, JSONL helpers, tests
+- `src/providers.ts`, `src/apiKeys.ts` – GLM and DeepSeek on top of Claude Code, API keys in secret storage
+- `src/limits` – usage limits of each agent, the shared cache and the status bar texts
 - `src/webview` – webview UI, bundled by esbuild into `media/dist` (not committed)
 
 ## Adding an agent
 
-Implement `SessionSource` from `src/sessions/types.ts` (list sessions, watch target, resume and new-session commands), register it in `SessionCatalog` in `sessionService.ts`, add the agent to `BUILT_IN_AGENTS` and drop its icons into `media/icons` (`<id>-light.svg`, `<id>-dark.svg`) and `src/webview/icons.ts`.
+Implement `SessionSource` from `src/sessions/types.ts` (list sessions, watch target, resume and new-session commands, delete), register it in `SessionCatalog` in `sessionService.ts`, add the agent to `BUILT_IN_AGENTS` and drop its icons into `media/icons` (`<id>-light.svg`, `<id>-dark.svg`) and `src/webview/icons.ts`.
 
 Session sources must not import `vscode`, so they stay testable with plain `node:test`.
 

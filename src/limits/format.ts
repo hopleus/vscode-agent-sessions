@@ -40,6 +40,14 @@ export function formatMoney(minorUnits: number, currency: string): string {
   }
 }
 
+export function formatAmount(amount: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount);
+  } catch {
+    return `${amount.toFixed(2)} ${currency}`;
+  }
+}
+
 export function formatAge(timestamp: number | undefined, now: number): string {
   if (timestamp === undefined) { return 'unknown time'; }
   const age = Math.max(0, now - timestamp);

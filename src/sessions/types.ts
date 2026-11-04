@@ -4,6 +4,7 @@ export interface SessionRecord {
   agentId: string;
   title: string;
   updatedAt: number;
+  model?: string;
 }
 
 export interface WatchTarget {
@@ -25,6 +26,7 @@ export interface SessionSource {
   watchTarget(cwd: string): WatchTarget;
   resumeCommand(command: string, id: string): string;
   newSession(command: string): NewSessionPlan;
+  delete(id: string, cwd: string, command: string): Promise<void>;
 }
 
 const SAFE_ID = /^[A-Za-z0-9_-]+$/;

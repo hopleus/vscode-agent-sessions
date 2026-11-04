@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0
+
+- Added Kimi Code: its sessions appear in the list with their titles, resume with one click and show up in the New Session menu
+- Added GLM (Claude Code) and DeepSeek (Claude Code): Claude Code on the Z.ai GLM Coding Plan or on DeepSeek, started from the New Session menu; the API key is asked once and kept in VS Code secret storage
+- GLM and DeepSeek sessions are listed with their own icons and resume on the same service
+- The status bar shows the GLM Coding Plan quota (5-hour, weekly and monthly MCP) and the DeepSeek balance
+- Sessions can be deleted from the context menu; this permanently removes them from the agent's history (OpenCode sessions through `opencode session delete`)
+
 ## 0.5.0
 
 - The session context menu is now the native VS Code menu (Pin or Unpin, Rename, and the Chrome items below)

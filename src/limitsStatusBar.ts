@@ -2,36 +2,39 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { CLAUDE_AGENT_ID, CODEX_AGENT_ID, OPENCODE_AGENT_ID } from './limits/agents';
+import { ApiKeys } from './apiKeys';
+import { CLAUDE_AGENT_ID, CODEX_AGENT_ID, DEEPSEEK_AGENT_ID, GLM_AGENT_ID, OPENCODE_AGENT_ID } from './limits/agents';
 import { fetchClaudeUsage, readCredentials } from './limits/claude';
 import { readCodexLimits } from './limits/codex';
+import { fetchDeepSeekBalance } from './limits/deepseek';
+import { fetchGlmQuota } from './limits/glm';
 import { readOpenCodeTokens } from './limits/opencode';
 import { DEFAULT_THRESHOLDS, Thresholds } from './limits/format';
-import { nextClaudeBackoff, refreshIntervalMs } from './limits/policy';
+import { RemoteLimits } from './limits/poller';
+import { refreshIntervalMs } from './limits/policy';
 import { limitsOf, LimitsView, StatusWindowMode, statusSeverity, statusText, tooltipMarkdown } from './limits/presentation';
-import { acquireUsageLock, readSharedUsage, writeSharedUsage } from './limits/shared';
-import { LimitsResult } from './limits/types';
-import { CONFIG_SECTION, REFRESH_LIMITS_COMMAND } from './constants';
+import { LimitsResult, UsageOutcome } from './limits/types';
+import { CONFIG_SECTION, REFRESH_LIMITS_COMMAND, SET_API_KEY_COMMANDS } from './constants';
+import { ProviderId } from './providers';
 import { SessionService } from './sessionService';
 
 const TICK_MS = 60_000;
 const TICK_SLACK_MS = 1_000;
 const MANUAL_REFRESH_COOLDOWN_MS = 5_000;
+const PROVIDER_AGENTS: readonly ProviderId[] = [GLM_AGENT_ID, DEEPSEEK_AGENT_ID];
 const CLAUDE_SETTING = 'limits.claude.enabled';
 const INTERVAL_SETTING = 'limits.refreshMinutes';
 const WINDOW_SETTING = 'limits.statusBarWindow';
 const PROMPTED_KEY = 'agentSessions.limitsPrompted';
-const TRUSTED_COMMANDS = ['workbench.action.openSettings', REFRESH_LIMITS_COMMAND];
+const TRUSTED_COMMANDS = ['workbench.action.openSettings', REFRESH_LIMITS_COMMAND, ...Object.values(SET_API_KEY_COMMANDS)];
 
 export class LimitsStatusBar implements vscode.Disposable {
   private readonly item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   private readonly subscriptions: vscode.Disposable[] = [this.item];
   private codex: LimitsResult | undefined;
-  private claude: LimitsResult | undefined;
-  private claudeNextAt = 0;
-  private claudeBackoffMs = refreshIntervalMs(undefined);
   private codexAt = 0;
-  private claudeFetchedAt = 0;
+  private readonly remote: Record<string, RemoteLimits>;
+  private readonly keyPresent = new Map<ProviderId, boolean>();
   private lastManualAt = 0;
   private inFlight: Promise<void> | undefined;
   private timer: NodeJS.Timeout | undefined;
@@ -39,8 +42,12 @@ export class LimitsStatusBar implements vscode.Disposable {
   constructor(
     private readonly service: SessionService,
     private readonly state: vscode.Memento,
-    private readonly storageDir: string,
-  ) {}
+    storageDir: string,
+    private readonly keys: ApiKeys,
+  ) {
+    const interval = () => this.intervalMs();
+    this.remote = Object.fromEntries([CLAUDE_AGENT_ID, ...PROVIDER_AGENTS].map(id => [id, new RemoteLimits(id, storageDir, interval)]));
+  }
 
   start(): void {
     this.item.command = REFRESH_LIMITS_COMMAND;
@@ -48,6 +55,11 @@ export class LimitsStatusBar implements vscode.Disposable {
       this.service.onDidChangeActiveSession(() => void this.render()),
       vscode.workspace.onDidChangeConfiguration(event => this.onConfigurationChanged(event)),
       vscode.window.onDidChangeWindowState(state => { if (state.focused) { void this.refresh(false); } }),
+      this.keys.onDidChange(event => {
+        if (!this.keys.isKey(event)) { return; }
+        PROVIDER_AGENTS.forEach(id => this.remote[id].reset());
+        void this.refresh(true);
+      }),
     );
     void this.refresh(true);
     void this.offerClaudeLimits();
@@ -63,15 +75,13 @@ export class LimitsStatusBar implements vscode.Disposable {
     const now = Date.now();
     if (now - this.lastManualAt < MANUAL_REFRESH_COOLDOWN_MS) { return; }
     this.lastManualAt = now;
-    this.claudeNextAt = 0;
     await this.refresh(true);
   }
 
   private onConfigurationChanged(event: vscode.ConfigurationChangeEvent): void {
     if (event.affectsConfiguration(`${CONFIG_SECTION}.${CLAUDE_SETTING}`)) { void this.refresh(true); }
     if (event.affectsConfiguration(`${CONFIG_SECTION}.${INTERVAL_SETTING}`)) {
-      this.claudeBackoffMs = this.intervalMs();
-      this.claudeNextAt = 0;
+      Object.values(this.remote).forEach(remote => remote.reset());
       void this.refresh(true);
     }
     if (event.affectsConfiguration(`${CONFIG_SECTION}.${WINDOW_SETTING}`)
@@ -89,12 +99,35 @@ export class LimitsStatusBar implements vscode.Disposable {
       this.codexAt = Date.now();
       this.codex = await readCodexLimits();
     }
-    if (!this.claudeEnabled()) {
-      this.claude = undefined;
-    } else {
-      await this.syncClaude(force);
+    const options = { force, focused: vscode.window.state.focused };
+    const canFetch = vscode.workspace.isTrusted;
+    await this.syncRemote(CLAUDE_AGENT_ID, this.claudeEnabled() && canFetch,
+      () => fetchClaudeUsage({ readCredentials, fetch, now: Date.now }), options);
+    for (const id of PROVIDER_AGENTS) {
+      const key = await this.keys.get(id);
+      this.keyPresent.set(id, !!key);
+      await this.syncRemote(id, !!key && canFetch, () => this.fetchProvider(id, key as string), options);
     }
     await this.render();
+  }
+
+  private async syncRemote(
+    id: string,
+    enabled: boolean,
+    fetchUsage: () => Promise<UsageOutcome>,
+    options: { force: boolean; focused: boolean },
+  ): Promise<void> {
+    const remote = this.remote[id];
+    if (!enabled) {
+      remote.clear();
+      return;
+    }
+    await remote.sync(fetchUsage, options);
+  }
+
+  private fetchProvider(id: ProviderId, key: string): Promise<UsageOutcome> {
+    const deps = { fetch, now: Date.now };
+    return id === GLM_AGENT_ID ? fetchGlmQuota(key, deps) : fetchDeepSeekBalance(key, deps);
   }
 
   private windowMode(): StatusWindowMode {
@@ -110,55 +143,6 @@ export class LimitsStatusBar implements vscode.Disposable {
     return Date.now() - this.codexAt >= this.intervalMs() - TICK_SLACK_MS;
   }
 
-  private shouldFetchClaude(force: boolean): boolean {
-    const now = Date.now();
-    if (!vscode.workspace.isTrusted) { return false; }
-    if (force) { return now - this.claudeFetchedAt >= MANUAL_REFRESH_COOLDOWN_MS; }
-    return vscode.window.state.focused && now >= this.claudeNextAt - TICK_SLACK_MS;
-  }
-
-  private adoptShared(): void {
-    const shared = readSharedUsage(this.storageDir);
-    if (!shared || shared.fetchedAt <= this.claudeFetchedAt) { return; }
-    this.claude = shared.result;
-    this.claudeFetchedAt = shared.fetchedAt;
-    this.claudeNextAt = shared.nextAt;
-    this.claudeBackoffMs = shared.backoffMs;
-  }
-
-  private async syncClaude(force: boolean): Promise<void> {
-    this.adoptShared();
-    if (!this.shouldFetchClaude(force)) { return; }
-    const release = acquireUsageLock(this.storageDir);
-    if (!release) { return; }
-    try {
-      this.adoptShared();
-      if (!this.shouldFetchClaude(force)) { return; }
-      await this.refreshClaude();
-      writeSharedUsage(this.storageDir, {
-        result: this.claude as LimitsResult,
-        fetchedAt: this.claudeFetchedAt,
-        nextAt: this.claudeNextAt,
-        backoffMs: this.claudeBackoffMs,
-      });
-    } finally {
-      release();
-    }
-  }
-
-  private async refreshClaude(): Promise<void> {
-    const outcome = await fetchClaudeUsage({ readCredentials, fetch, now: Date.now });
-    if (!outcome.transient || this.claude?.kind !== 'ok' || outcome.result.kind === 'ok') {
-      this.claude = outcome.result;
-    }
-    this.claudeBackoffMs = nextClaudeBackoff(this.claudeBackoffMs, {
-      ok: outcome.result.kind === 'ok',
-      retryAfterMs: outcome.retryAfterMs,
-    }, this.intervalMs());
-    this.claudeFetchedAt = Date.now();
-    this.claudeNextAt = this.claudeFetchedAt + this.claudeBackoffMs;
-  }
-
   private async currentView(): Promise<LimitsView> {
     const current = await this.service.currentSession();
     const agentId = current?.agentId ?? this.firstAvailableAgentId();
@@ -168,6 +152,7 @@ export class LimitsStatusBar implements vscode.Disposable {
       result: this.resultOf(agentId),
       tokens: agentId === OPENCODE_AGENT_ID && current ? readOpenCodeTokens(current.id) : undefined,
       claudeEnabled: this.claudeEnabled(),
+      setKeyCommand: this.setKeyCommandFor(agentId),
       thresholds: this.thresholds(),
       now: Date.now(),
       refreshCommand: REFRESH_LIMITS_COMMAND,
@@ -197,12 +182,17 @@ export class LimitsStatusBar implements vscode.Disposable {
   }
 
   private resultOf(agentId: string | undefined): LimitsResult | undefined {
-    if (agentId === CLAUDE_AGENT_ID) { return this.claude; }
-    return agentId === CODEX_AGENT_ID ? this.codex : undefined;
+    if (agentId === CODEX_AGENT_ID) { return this.codex; }
+    return agentId ? this.remote[agentId]?.result : undefined;
+  }
+
+  private setKeyCommandFor(agentId: string | undefined): string | undefined {
+    const provider = PROVIDER_AGENTS.find(id => id === agentId);
+    return provider && this.keyPresent.get(provider) === false ? SET_API_KEY_COMMANDS[provider] : undefined;
   }
 
   private firstAvailableAgentId(): string | undefined {
-    return [CLAUDE_AGENT_ID, CODEX_AGENT_ID].find(agentId => limitsOf(this.resultOf(agentId)));
+    return [CLAUDE_AGENT_ID, CODEX_AGENT_ID, ...PROVIDER_AGENTS].find(agentId => limitsOf(this.resultOf(agentId)));
   }
 
   private thresholds(): Thresholds {
